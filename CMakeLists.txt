@@ -1,4 +1,4 @@
-cmake_minimum_required (VERSION 3.10)
+cmake_minimum_required (VERSION 3.12)
 
 message("CMAKE_VERSION: ${CMAKE_VERSION}") 
 message("CMAKE_BUILD_TYPE: ${CMAKE_BUILD_TYPE}")
@@ -17,16 +17,11 @@ set(FILE_LIST
 )
 
 find_package(spdlog CONFIG REQUIRED)
+find_package(TwoBot CONFIG REQUIRED)
 
 add_executable(${PROJECT_NAME} ${FILE_LIST})
 
-target_link_libraries(${PROJECT_NAME} PRIVATE spdlog::spdlog_header_only)
+target_link_libraries(${PROJECT_NAME} PRIVATE spdlog::spdlog_header_only TwoBot::TwoBot)
 
-if (CMAKE_VERSION VERSION_GREATER 3.12)
-  set_property(TARGET ${PROJECT_NAME} PROPERTY CXX_STANDARD 20)
-  message("Set C++20")
-endif()
+set_property(TARGET ${PROJECT_NAME} PROPERTY CXX_STANDARD 20)
 
-if (${CMAKE_BUILD_TYPE} STREQUAL "Debug")
-  target_compile_definitions(${PROJECT_NAME} PUBLIC DEBUG)
-endif()
