@@ -9,9 +9,12 @@
       "kind": "artifact",
       "location": "https://github.com/microsoft/vcpkg-ce-catalog/archive/refs/heads/main.zip",
       "name": "microsoft"
+    },
+    {
+      "kind": "git",
+      "baseline": "779376135e06aa7c2e7780d328b70ec48d4edead",
+      "repository": "https://github.com/liyk123/vcpkg",
+      "packages": [ "twobot" ]
     }
-  ],
-  "overlay-ports": [
-    "../custom-overlay"
   ]
 }
