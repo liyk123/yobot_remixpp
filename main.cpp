@@ -70,19 +70,19 @@ int main(int argc, char** args)
             r = instance->getApiSet(session).sendPrivateMsg(msg.user_id, std::string(buf));
         }
         std::cout << r.second.dump() << std::endl;
-        });
+    });
 
     instance->onEvent<EnableEvent>([&instance](const EnableEvent& msg, void* session) {
         std::cout << "twobot已启动！机器人QQ：" << msg.self_id << std::endl;
-        });
+    });
 
     instance->onEvent<DisableEvent>([&instance](const DisableEvent& msg, void* session) {
         std::cout << "twobot已停止！ID: " << msg.self_id << std::endl;
-        });
+    });
 
     instance->onEvent<ConnectEvent>([&instance](const ConnectEvent& msg, void* session) {
         std::cout << "twobot已连接！ID: " << msg.self_id << std::endl;
-        });
+    });
 
 
     // 启动机器人
