@@ -1,5 +1,6 @@
 #include <iostream>
 #include <twobot.hh>
+#include "yobotdata.h"
 
 using twobot::Config;
 using twobot::BotInstance;
