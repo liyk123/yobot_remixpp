@@ -1,7 +1,7 @@
 {
   "default-registry": {
     "kind": "git",
-    "baseline": "e590c2b30c08caf1dd8d612ec602a003f9784b7d",
+    "baseline": "bfed87b1938fbd406b9eef28c281b6219c889ae1",
     "repository": "https://github.com/microsoft/vcpkg"
   },
   "registries": [
@@ -12,7 +12,7 @@
     },
     {
       "kind": "git",
-      "baseline": "779376135e06aa7c2e7780d328b70ec48d4edead",
+      "baseline": "57817bc3d438096ba68dee1975b34f2631c83dc7",
       "repository": "https://github.com/liyk123/vcpkg",
       "reference": "pcrbotpp",
       "packages": [ "twobot" ]
