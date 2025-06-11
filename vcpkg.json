@@ -5,6 +5,7 @@
       "name": "sqlpp11",
       "features": [ "sqlite3" ]
     },
+    "async-simple",
     "twobot"
   ]
 }
