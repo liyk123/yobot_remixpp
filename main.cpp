@@ -66,15 +66,23 @@ namespace yobot {
 
 }
 
-int main(int argc, char** args)
+void InitEnv()
 {
 #ifdef _WIN32
     system("chcp 65001 && cls");
 #endif
-    const char* localeName = "zh_CN.UTF-8";
-    std::setlocale(LC_ALL, localeName);
-    std::locale::global(std::locale(localeName));
-    auto sqlconfig = std::make_shared<sqlpp::sqlite3::connection_config>("yobotdata.db", SQLITE_OPEN_READWRITE);
+    const char* targetLocaleName = "zh_CN.UTF-8";
+    const char* cLocaleName = "C";
+    std::setlocale(LC_ALL, targetLocaleName);
+    std::setlocale(LC_NUMERIC, cLocaleName);
+    std::locale::global(std::locale(targetLocaleName));
+    std::locale::global(std::locale(cLocaleName, std::locale::numeric));
+}
+
+int main(int argc, char** args)
+{
+    InitEnv();
+    auto sqlconfig = std::make_shared<sqlpp::sqlite3::connection_config>("yobotdata.db", SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE);
     auto db_pool = std::make_shared<sqlpp::sqlite3::connection_pool>(sqlconfig,2);
     twobot::Config config = {
         "192.168.123.50",
