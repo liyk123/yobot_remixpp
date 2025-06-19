@@ -3,7 +3,7 @@
 #include <sqlpp11/sqlpp11.h>
 #include <sqlpp11/sqlite3/sqlite3.h>
 #include <async_simple/coro/Lazy.h>
-#include "yobotdata.h"
+#include "yobotdata_new.h"
 
 using namespace twobot::Event;
 
@@ -53,7 +53,7 @@ namespace yobot {
             auto groupID = std::to_string(m_groupID);
             for (const auto &raw : db(sqlpp::select(sqlpp::all_of(m_clanGroup)).from(m_clanGroup).where(m_clanGroup.groupId == m_groupID)))
             {
-                message += std::format("{} {} {} {}", raw.battleId.value(), raw.bossNum.value(), raw.bossCycle.value(), raw.bossHealth.value());
+                message += std::format("{} {} {} {}", raw.battleId.value(), raw.challengingMemberList.value(), raw.bossCycle.value(), raw.nowCycleBossHealth.value());
             }
             return message;
 		}
@@ -82,7 +82,7 @@ void InitEnv()
 int main(int argc, char** args)
 {
     InitEnv();
-    auto sqlconfig = std::make_shared<sqlpp::sqlite3::connection_config>("yobotdata.db", SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE);
+    auto sqlconfig = std::make_shared<sqlpp::sqlite3::connection_config>("yobotdata_new.db", SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE);
     auto db_pool = std::make_shared<sqlpp::sqlite3::connection_pool>(sqlconfig,2);
     twobot::Config config = {
         "192.168.123.50",
