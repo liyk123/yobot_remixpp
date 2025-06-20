@@ -15,6 +15,7 @@ project (${PROJECT_NAME})
 set(FILE_LIST 
 	"main.cpp"
 	"yobotdata_new.h"
+	"default_config.h"
 )
 
 find_package(spdlog CONFIG REQUIRED)
