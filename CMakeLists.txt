@@ -16,6 +16,7 @@ set(FILE_LIST
 	"main.cpp"
 	"yobotdata_new.h"
 	"default_config.h"
+	"yobotdata_new.sql.h"
 )
 
 find_package(spdlog CONFIG REQUIRED)

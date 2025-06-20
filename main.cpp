@@ -5,6 +5,7 @@
 #include <async_simple/coro/Lazy.h>
 #include "yobotdata_new.h"
 #include "default_config.h"
+#include "yobotdata_new.sql.h"
 
 #define CONNECT_LITERAL(X,Y) X##Y
 
@@ -77,7 +78,7 @@ inline auto InitConfig()
 #ifdef _WIN32
     system("chcp 65001 && cls");
 #endif
-    std::cout << "Initializing...";
+    std::cout << "Initializing...\n";
     const char* targetLocaleName = "zh_CN.UTF-8";
     const char* cLocaleName = "C";
     std::setlocale(LC_ALL, targetLocaleName);
@@ -85,6 +86,7 @@ inline auto InitConfig()
     std::locale::global(std::locale(targetLocaleName));
     std::locale::global(std::locale(cLocaleName, std::locale::numeric));
     auto dbConfig = std::make_shared<yobot::DB_Config>("yobotdata_new.db", SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE);
+    dbConfig->debug = true;
     twobot::Config botConfig = {
         .host = "192.168.123.50",
         .api_port = 5700,
@@ -94,12 +96,29 @@ inline auto InitConfig()
     return std::make_tuple(botConfig, dbConfig);
 }
 
+std::shared_ptr<yobot::DB_Pool> InitDatabase(const std::shared_ptr<yobot::DB_Config> &dbConfig)
+{
+    auto dbPool = std::make_shared<yobot::DB_Pool>(dbConfig, 2);
+    auto lines = YOBOT_DATA_NEW_SQL
+        | std::views::split('\n')
+        | std::views::transform([](auto&& r) {
+            return std::string_view(&*r.begin(), std::ranges::distance(r));
+        })
+        | std::views::filter([](auto&& l) { return l.size() > 1; });
+    auto db = dbPool->get();
+    for (auto&& line : lines)
+    {
+        db.execute(std::string(line));
+    }
+    return dbPool;
+}
+
 int main(int argc, char** args)
 {
     twobot::Config botConfig;
     std::shared_ptr<yobot::DB_Config> dbConfig;
     std::tie(botConfig, dbConfig) = InitConfig();
-    auto dbPool = std::make_shared<yobot::DB_Pool>(dbConfig, 2);
+    auto dbPool = InitDatabase(dbConfig);
     auto instance = twobot::BotInstance::createInstance(botConfig);
 
     instance->onEvent<GroupMsg>([&instance, &dbPool](const GroupMsg& msg, void* session) {

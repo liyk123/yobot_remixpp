@@ -1,3 +1,5 @@
+#pragma once
+#define YOBOT_DATA_NEW_SQL R"(
 CREATE TABLE IF NOT EXISTS "db_schema" ("key" VARCHAR(64) NOT NULL PRIMARY KEY, "value" TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS "admin_key" ("key" VARCHAR(255) NOT NULL PRIMARY KEY, "valid" INTEGER NOT NULL, "key_used" INTEGER NOT NULL, "cookie" VARCHAR(255) NOT NULL, "create_time" INTEGER NOT NULL);
 CREATE INDEX "admin_key_cookie" ON "admin_key" ("cookie");
@@ -16,3 +18,4 @@ CREATE INDEX "clan_challenge_bid_gid" ON "clan_challenge" ("bid", "gid");
 CREATE INDEX "clan_challenge_qqid_challenge_pcrdate" ON "clan_challenge" ("qqid", "challenge_pcrdate");
 CREATE INDEX "clan_challenge_bid_gid_challenge_pcrdate" ON "clan_challenge" ("bid", "gid", "challenge_pcrdate");
 CREATE TABLE IF NOT EXISTS "character" ("chid" INTEGER NOT NULL PRIMARY KEY, "name" VARCHAR(64) NOT NULL, "frequent" INTEGER NOT NULL);
+)"
