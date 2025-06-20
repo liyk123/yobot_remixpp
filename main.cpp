@@ -4,8 +4,13 @@
 #include <sqlpp11/sqlite3/sqlite3.h>
 #include <async_simple/coro/Lazy.h>
 #include "yobotdata_new.h"
+#include "default_config.h"
 
+#define CONNECT_LITERAL(X,Y) X##Y
+
+using namespace nlohmann::json_literals;
 using namespace twobot::Event;
+
 
 namespace yobot {
     namespace cqcode {
@@ -26,6 +31,7 @@ namespace yobot {
     }
 
     using DB_Pool = sqlpp::sqlite3::connection_pool;
+    using DB_Config = sqlpp::sqlite3::connection_config;
 
     class Group
     {
@@ -66,31 +72,37 @@ namespace yobot {
 
 }
 
-void InitEnv()
+inline auto InitConfig()
 {
 #ifdef _WIN32
     system("chcp 65001 && cls");
 #endif
+    std::cout << "Initializing...";
     const char* targetLocaleName = "zh_CN.UTF-8";
     const char* cLocaleName = "C";
     std::setlocale(LC_ALL, targetLocaleName);
     std::setlocale(LC_NUMERIC, cLocaleName);
     std::locale::global(std::locale(targetLocaleName));
     std::locale::global(std::locale(cLocaleName, std::locale::numeric));
+    auto dbConfig = std::make_shared<yobot::DB_Config>("yobotdata_new.db", SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE);
+    twobot::Config botConfig = {
+        .host = "192.168.123.50",
+        .api_port = 5700,
+        .ws_port = 9444,
+        .token = std::nullopt
+    };
+    return std::make_tuple(botConfig, dbConfig);
 }
 
 int main(int argc, char** args)
 {
-    InitEnv();
-    auto sqlconfig = std::make_shared<sqlpp::sqlite3::connection_config>("yobotdata_new.db", SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE);
-    auto db_pool = std::make_shared<sqlpp::sqlite3::connection_pool>(sqlconfig,2);
-    twobot::Config config = {
-        "192.168.123.50",
-        5700,
-        9444
-    };
-    auto instance = twobot::BotInstance::createInstance(config);
-    instance->onEvent<GroupMsg>([&instance, &db_pool](const GroupMsg& msg, void* session) {
+    twobot::Config botConfig;
+    std::shared_ptr<yobot::DB_Config> dbConfig;
+    std::tie(botConfig, dbConfig) = InitConfig();
+    auto dbPool = std::make_shared<yobot::DB_Pool>(dbConfig, 2);
+    auto instance = twobot::BotInstance::createInstance(botConfig);
+
+    instance->onEvent<GroupMsg>([&instance, &dbPool](const GroupMsg& msg, void* session) {
         auto sessionSet = instance->getApiSet(session);
         if (msg.raw_message == "你好")
         {
@@ -98,15 +110,15 @@ int main(int argc, char** args)
         }
         if (msg.raw_message == "进度")
         {
-            auto group = yobot::Group(db_pool, msg.group_id);
+            auto group = yobot::Group(dbPool, msg.group_id);
             std::cout << group.getStatus() << std::endl;
 			sessionSet.sendGroupMsg(msg.group_id, "操作完成");
         }
     });
 
-    instance->onEvent<PrivateMsg>([&instance, &db_pool](const PrivateMsg& msg, void* session) {
+    instance->onEvent<PrivateMsg>([&instance, &dbPool](const PrivateMsg& msg, void* session) {
         auto sessionSet = instance->getApiSet(session);
-        auto db = db_pool->get();
+        auto db = dbPool->get();
         if (msg.raw_message == "你好")
         {
             sessionSet.sendPrivateMsg(msg.user_id, "你好，我是yobotpp！");
@@ -143,6 +155,7 @@ int main(int argc, char** args)
         std::cout << "yobotpp已连接！ID: " << msg.self_id << std::endl;
     });
 
+    std::cout << "Start listening:" << botConfig.ws_port << std::endl;
     instance->start();
 
     return 0;
