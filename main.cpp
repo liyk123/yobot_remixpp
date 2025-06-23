@@ -11,6 +11,7 @@
 
 using namespace nlohmann::json_literals;
 using namespace twobot::Event;
+using nlohmann::json;
 
 
 namespace yobot {
@@ -53,16 +54,24 @@ namespace yobot {
         Group(Group&&) = default;
 
     public:
-		std::string getStatus()
+        std::optional<std::tuple<std::int64_t, json, json, json>> getStatus()
 		{
             auto db = m_pool->get();
-            std::string message;
-            auto groupID = std::to_string(m_groupID);
-            for (const auto &raw : db(sqlpp::select(sqlpp::all_of(m_clanGroup)).from(m_clanGroup).where(m_clanGroup.groupId == m_groupID)))
+            auto raws = db(
+                sqlpp::select(sqlpp::all_of(m_clanGroup))
+                .from(m_clanGroup)
+                .where(m_clanGroup.groupId == m_groupID)
+            );
+            for (const auto &raw : raws)
             {
-                message += std::format("{} {} {} {}", raw.battleId.value(), raw.challengingMemberList.value(), raw.bossCycle.value(), raw.nowCycleBossHealth.value());
+                return std::make_optional(std::make_tuple(
+                    raw.bossCycle.value(),
+                    json::parse(raw.challengingMemberList.value()),
+                    json::parse(raw.nowCycleBossHealth.value()),
+                    json::parse(raw.nextCycleBossHealth.value())
+                ));
             }
-            return message;
+            return std::nullopt;
 		}
 
     private:
@@ -79,16 +88,17 @@ inline auto InitConfig()
     system("chcp 65001 && cls");
 #endif
     std::cout << "Initializing...\n";
-    const char* targetLocaleName = "zh_CN.UTF-8";
-    const char* cLocaleName = "C";
+    constexpr auto targetLocaleName = "zh_CN.UTF-8";
+    constexpr auto cLocaleName = "C";
+    constexpr auto dbName = "yobotdata_new.db";
     std::setlocale(LC_ALL, targetLocaleName);
     std::setlocale(LC_NUMERIC, cLocaleName);
     std::locale::global(std::locale(targetLocaleName));
     std::locale::global(std::locale(cLocaleName, std::locale::numeric));
-    auto dbConfig = std::make_shared<yobot::DB_Config>("yobotdata_new.db", SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE);
+    auto dbConfig = std::make_shared<yobot::DB_Config>(dbName, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE);
     dbConfig->debug = true;
     twobot::Config botConfig = {
-        .host = "192.168.123.50",
+        .host = "127.0.0.1",
         .api_port = 5700,
         .ws_port = 9444,
         .token = std::nullopt
@@ -99,17 +109,18 @@ inline auto InitConfig()
 std::shared_ptr<yobot::DB_Pool> InitDatabase(const std::shared_ptr<yobot::DB_Config> &dbConfig)
 {
     auto dbPool = std::make_shared<yobot::DB_Pool>(dbConfig, 2);
-    auto lines = YOBOT_DATA_NEW_SQL
-        | std::views::split('\n')
-        | std::views::transform([](auto&& r) {
-            return std::string_view(&*r.begin(), std::ranges::distance(r));
-        })
-        | std::views::filter([](auto&& l) { return l.size() > 1; });
     auto db = dbPool->get();
-    for (auto&& line : lines)
-    {
-        db.execute(std::string(line));
-    }
+	for (auto&& line : YOBOT_DATA_NEW_SQL)
+	{
+        try 
+        {
+            db.execute(line);
+        }
+        catch (sqlpp::exception ignore)
+        {
+            
+        }
+	}
     return dbPool;
 }
 
