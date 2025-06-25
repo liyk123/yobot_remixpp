@@ -66,7 +66,7 @@ namespace yobot {
             {
                 return std::make_optional(std::make_tuple(
                     raw.bossCycle.value(),
-                    json::parse(raw.challengingMemberList.value()),
+                    json::parse(raw.challengingMemberList.value(), nullptr, false),
                     json::parse(raw.nowCycleBossHealth.value()),
                     json::parse(raw.nextCycleBossHealth.value())
                 ));
