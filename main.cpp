@@ -55,7 +55,7 @@ namespace yobot {
 
     public:
         std::optional<std::tuple<std::int64_t, json, json, json>> getStatus()
-		{
+        {            
             auto db = m_pool->get();
             auto raws = db(
                 sqlpp::select(sqlpp::all_of(m_clanGroup))
@@ -74,10 +74,26 @@ namespace yobot {
             return std::nullopt;
 		}
 
+        void setStatus(const std::int64_t& bossCycle, const json& nowCycleBossHealth, const json& nextCycleBossHealth)
+        {
+            auto db = m_pool->get();
+            db(
+                sqlpp::update(m_clanGroup)
+                .set(
+                    m_clanGroup.challengingMemberList = sqlpp::null,
+                    m_clanGroup.subscribeList = sqlpp::null,
+                    m_clanGroup.bossCycle = bossCycle,
+                    m_clanGroup.nowCycleBossHealth = nowCycleBossHealth.dump(),
+                    m_clanGroup.nextCycleBossHealth = nextCycleBossHealth.dump()
+                )
+                .where(m_clanGroup.groupId == m_groupID)
+            );
+        }
+
     private:
         std::shared_ptr<DB_Pool> m_pool;
         std::uint64_t m_groupID;
-        yobot::data::ClanGroup m_clanGroup;
+        data::ClanGroup m_clanGroup;
     };
 
 }
