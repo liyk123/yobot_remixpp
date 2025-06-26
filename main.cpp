@@ -16,19 +16,27 @@ using nlohmann::json;
 
 namespace yobot {
     namespace cqcode {
-        inline constexpr auto cq(const char* op, auto id)
+        inline constexpr std::string cq(const char* op, auto id)
         {
 			return std::format("[CQ:{},qq={}]", op, id);
         }
 
-        inline constexpr auto at(auto id)
+        inline constexpr std::string at(auto id)
         {
             return cq("at", id);
         }
 
-        inline constexpr auto avatar(auto id)
+        inline constexpr std::string avatar(auto id)
         {
             return cq("avatar", id);
+        }
+    }
+
+    namespace tools {
+        template <typename... Args>
+        inline auto make_optional_tuple(Args&&... args)
+        {
+            return std::make_optional(std::make_tuple(std::forward<Args>(args)...));
         }
     }
 
@@ -64,12 +72,16 @@ namespace yobot {
             );
             for (const auto &raw : raws)
             {
-                return std::make_optional(std::make_tuple(
+                if (raw.deleted)
+                {
+                    break;
+                }
+                return tools::make_optional_tuple(
                     raw.bossCycle.value(),
                     json::parse(raw.challengingMemberList.value(), nullptr, false),
                     json::parse(raw.nowCycleBossHealth.value()),
                     json::parse(raw.nextCycleBossHealth.value())
-                ));
+                );
             }
             return std::nullopt;
 		}
@@ -157,7 +169,23 @@ int main(int argc, char** args)
         if (msg.raw_message == "进度")
         {
             auto group = yobot::Group(dbPool, msg.group_id);
-            std::cout << group.getStatus() << std::endl;
+            std::int64_t bossCycle;
+            json challengingMemberList;
+            json nowCycleBossHealth;
+            json nextCycleBossHealth;
+            auto status = group.getStatus();
+            if (status) 
+            {
+                std::cout << status << std::endl;
+                std::tie(bossCycle, challengingMemberList, nowCycleBossHealth, nextCycleBossHealth) = *status;
+                std::string message = std::format("现在是第{}周目：", bossCycle);
+                for (size_t i = 1; i <= 5; i++)
+                {
+                    bool chanllenging = !challengingMemberList.is_discarded() && !challengingMemberList[std::to_string(i)].is_null();
+                    auto health = (nowCycleBossHealth[std::to_string(i)] == 0 ? nextCycleBossHealth[std::to_string(i)].get<std::int64_t>() : 0);
+                    message += std::format("\n{}.【{:■<{}}{:□<{}}】{}人", i, "", i, "", i, (chanllenging?"有":"无"));
+                }
+            }
 			sessionSet.sendGroupMsg(msg.group_id, "操作完成");
         }
     });
