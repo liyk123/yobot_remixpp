@@ -2,6 +2,7 @@
 #include <mimalloc-override.h>
 #include <mimalloc-stats.h>
 #include <iostream>
+#include <fstream>
 #include <twobot.hh>
 #include <sqlpp11/sqlpp11.h>
 #include <sqlpp11/sqlite3/sqlite3.h>
@@ -16,6 +17,10 @@ using namespace nlohmann::json_literals;
 using namespace twobot::Event;
 using nlohmann::json;
 
+constexpr auto targetLocaleName = "zh_CN.UTF-8";
+constexpr auto cLocaleName = "C";
+constexpr auto dbName = "yobotdata_new.db";
+constexpr auto configName = "yobot_config.json";
 
 namespace yobot {
     namespace cqcode {
@@ -49,23 +54,20 @@ namespace yobot {
     class Group
     {
     public:
-        Group(std::shared_ptr<DB_Pool> pool, std::uint64_t groupID)
+        Group(std::shared_ptr<DB_Pool> pool, std::uint64_t groupID) noexcept
             : m_pool(pool)
             , m_groupID(groupID)
             , m_clanGroup()
         {
-
+            
         }
-        ~Group()
-        {
-
-        }
+        ~Group() = default;
 		Group(const Group&) = delete;
 		Group(Group&) = delete;
         Group(Group&&) = default;
 
     public:
-        std::optional<std::tuple<std::int64_t, json, json, json>> getStatus()
+        std::optional<std::tuple<std::int64_t, std::string, json, json, json, json>> getStatus()
         {            
             auto db = m_pool->get();
             auto raws = db(
@@ -81,7 +83,9 @@ namespace yobot {
                 }
                 return tools::make_optional_tuple(
                     raw.bossCycle.value(),
+                    raw.gameServer.value(),
                     json::parse(raw.challengingMemberList.value(), nullptr, false),
+                    json::parse(raw.subscribeList.value(), nullptr, false),
                     json::parse(raw.nowCycleBossHealth.value()),
                     json::parse(raw.nextCycleBossHealth.value())
                 );
@@ -89,20 +93,38 @@ namespace yobot {
             return std::nullopt;
 		}
 
-        void setStatus(const std::int64_t& bossCycle, const json& nowCycleBossHealth, const json& nextCycleBossHealth)
+        bool setStatus(const std::int64_t& bossCycle, const json& nowCycleBossHealth, const json& nextCycleBossHealth)
         {
+            bool ret = false;
             auto db = m_pool->get();
-            db(
-                sqlpp::update(m_clanGroup)
-                .set(
-                    m_clanGroup.challengingMemberList = sqlpp::null,
-                    m_clanGroup.subscribeList = sqlpp::null,
-                    m_clanGroup.bossCycle = bossCycle,
-                    m_clanGroup.nowCycleBossHealth = nowCycleBossHealth.dump(),
-                    m_clanGroup.nextCycleBossHealth = nextCycleBossHealth.dump()
-                )
-                .where(m_clanGroup.groupId == m_groupID)
-            );
+            if (isStatusLegal(bossCycle, nowCycleBossHealth, nextCycleBossHealth))
+            {
+                db(
+                    sqlpp::update(m_clanGroup)
+                    .set(
+                        m_clanGroup.challengingMemberList = sqlpp::null,
+                        m_clanGroup.subscribeList = sqlpp::null,
+                        m_clanGroup.bossCycle = bossCycle,
+                        m_clanGroup.nowCycleBossHealth = nowCycleBossHealth.dump(),
+                        m_clanGroup.nextCycleBossHealth = nextCycleBossHealth.dump()
+                    )
+                    .where(m_clanGroup.groupId == m_groupID)
+                );
+                ret = true;
+            }
+            return ret;
+        }
+
+    private:
+        void updateStatusInternal()
+        {
+
+        }
+
+        bool isStatusLegal(const std::int64_t& bossCycle, const json& nowCycleBossHealth, const json& nextCycleBossHealth)
+        {
+            
+            return false;
         }
 
     private:
@@ -111,33 +133,45 @@ namespace yobot {
         data::ClanGroup m_clanGroup;
     };
 
+
+
 }
 
-inline auto InitConfig()
+inline auto InitConfig() noexcept
 {
 #ifdef _WIN32
     system("chcp 65001 && cls");
 #endif
     std::cout << "Initializing...\n";
-    constexpr auto targetLocaleName = "zh_CN.UTF-8";
-    constexpr auto cLocaleName = "C";
-    constexpr auto dbName = "yobotdata_new.db";
+    mi_option_set_enabled(mi_option_show_stats, true);
+    mi_option_set_enabled(mi_option_verbose, true);
+    mi_option_set_enabled(mi_option_show_errors, true);
     std::setlocale(LC_ALL, targetLocaleName);
     std::setlocale(LC_NUMERIC, cLocaleName);
     std::locale::global(std::locale(targetLocaleName));
     std::locale::global(std::locale(cLocaleName, std::locale::numeric));
     auto dbConfig = std::make_shared<yobot::DB_Config>(dbName, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE);
-    dbConfig->debug = true;
+    if (!std::filesystem::exists(configName) || std::filesystem::file_size(configName) == 0)
+    {
+        std::ofstream(configName) << DEFAULT_CONFIG;
+    }
+    auto globalConfig = json::parse(std::ifstream(configName));
+    auto accessToken = globalConfig["access_token"].get<std::string>();
     twobot::Config botConfig = {
         .host = "127.0.0.1",
         .api_port = 5700,
-        .ws_port = 9444,
-        .token = std::nullopt
+        .ws_port = globalConfig["port"],
+        .token = (accessToken.empty() ? std::nullopt : std::make_optional(accessToken))
     };
-    return std::make_tuple(botConfig, dbConfig);
+    json bossConfig = {
+        {"boss", globalConfig["boss"]},
+        {"level_by_cycle", globalConfig["level_by_cycle"]},
+        {"boss_id", globalConfig["boss_id"]}
+    };
+    return std::make_tuple(botConfig, dbConfig, bossConfig);
 }
 
-std::shared_ptr<yobot::DB_Pool> InitDatabase(const std::shared_ptr<yobot::DB_Config> &dbConfig)
+std::shared_ptr<yobot::DB_Pool> InitDatabase(const std::shared_ptr<yobot::DB_Config> &dbConfig) noexcept
 {
     auto dbPool = std::make_shared<yobot::DB_Pool>(dbConfig, 2);
     auto db = dbPool->get();
@@ -159,12 +193,14 @@ int main(int argc, char** args)
 {
     twobot::Config botConfig;
     std::shared_ptr<yobot::DB_Config> dbConfig;
-    std::tie(botConfig, dbConfig) = InitConfig();
+    json bossConfig;
+    std::tie(botConfig, dbConfig, bossConfig) = InitConfig();
     auto dbPool = InitDatabase(dbConfig);
     auto instance = twobot::BotInstance::createInstance(botConfig);
 
     instance->onEvent<GroupMsg>([&instance, &dbPool](const GroupMsg& msg, const std::any& session) {
         auto sessionSet = instance->getApiSet(session);
+
         if (msg.raw_message == "你好")
         {
             sessionSet.sendGroupMsg(msg.group_id, "你好，我是yobotpp！");
@@ -173,19 +209,19 @@ int main(int argc, char** args)
         {
             auto group = yobot::Group(dbPool, msg.group_id);
             std::int64_t bossCycle;
-            json challengingMemberList;
-            json nowCycleBossHealth;
-            json nextCycleBossHealth;
+            std::string gameServer;
+            json chalList, subList;
+            json thisHPList, nextHPList;
             auto status = group.getStatus();
-            if (status) 
+            if (status)
             {
                 std::cout << status << std::endl;
-                std::tie(bossCycle, challengingMemberList, nowCycleBossHealth, nextCycleBossHealth) = *status;
+                std::tie(bossCycle, gameServer, subList, chalList, thisHPList, nextHPList) = *status;
                 std::string message = std::format("现在是第{}周目：", bossCycle);
                 for (size_t i = 1; i <= 5; i++)
                 {
-                    bool chanllenging = !challengingMemberList.is_discarded() && !challengingMemberList[std::to_string(i)].is_null();
-                    auto health = (nowCycleBossHealth[std::to_string(i)] == 0 ? nextCycleBossHealth[std::to_string(i)].get<std::int64_t>() : 0);
+                    bool chanllenging = !chalList.is_discarded() && !chalList[std::to_string(i)].is_null();
+                    auto health = (thisHPList[std::to_string(i)] == 0 ? nextHPList[std::to_string(i)].get<std::int64_t>() : 0);
                     message += std::format("\n{}.【{:■<{}}{:□<{}}】{}人", i, "", i, "", i, (chanllenging?"有":"无"));
                 }
             }

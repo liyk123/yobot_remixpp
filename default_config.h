@@ -1,8 +1,7 @@
 #pragma once
-#define DEFAULT_CONFIG R"(
-{
+#define DEFAULT_CONFIG R"({
     "host": "0.0.0.0",
-    "port": 9222,
+    "port": 9444,
     "access_token": "",
     "client_salt": null,
     "public_address": null,
