@@ -1,3 +1,6 @@
+#include <mimalloc-new-delete.h>
+#include <mimalloc-override.h>
+#include <mimalloc-stats.h>
 #include <iostream>
 #include <twobot.hh>
 #include <sqlpp11/sqlpp11.h>

@@ -10,6 +10,7 @@
       "name": "cpp-httplib",
       "default-features": false
     },
+    "mimalloc",
     "twobot"
   ]
 }

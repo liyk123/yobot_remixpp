@@ -23,10 +23,11 @@ find_package(spdlog CONFIG REQUIRED)
 find_package(Sqlpp11 CONFIG REQUIRED COMPONENTS SQLite3)
 find_package(TwoBot CONFIG REQUIRED)
 find_package(async_simple CONFIG REQUIRED)
+find_package(mimalloc CONFIG REQUIRED)
 
 add_executable(${PROJECT_NAME} ${FILE_LIST})
 
-target_link_libraries(${PROJECT_NAME} PRIVATE spdlog::spdlog_header_only TwoBot::TwoBot sqlpp11::sqlite3 async_simple::async_simple)
+target_link_libraries(${PROJECT_NAME} PRIVATE spdlog::spdlog_header_only TwoBot::TwoBot sqlpp11::sqlite3 async_simple::async_simple $<IF:$<TARGET_EXISTS:mimalloc-static>,mimalloc-static,mimalloc>)
 
 set_property(TARGET ${PROJECT_NAME} PROPERTY CXX_STANDARD 20)
 
