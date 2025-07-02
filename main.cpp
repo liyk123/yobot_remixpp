@@ -1,6 +1,5 @@
 #include <mimalloc-new-delete.h>
 #include <mimalloc-override.h>
-#include <mimalloc-stats.h>
 #include <iostream>
 #include <fstream>
 #include <twobot.hh>
@@ -16,6 +15,7 @@
 using namespace nlohmann::json_literals;
 using namespace twobot::Event;
 using nlohmann::json;
+using nlohmann::ordered_json;
 
 constexpr auto targetLocaleName = "zh_CN.UTF-8";
 constexpr auto cLocaleName = "C";
@@ -67,7 +67,7 @@ namespace yobot {
         Group(Group&&) = default;
 
     public:
-        std::optional<std::tuple<std::int64_t, std::string, json, json, json, json>> getStatus()
+        auto getStatus() -> std::optional<std::tuple<std::int64_t, std::string, json, json, json, json>>
         {            
             auto db = m_pool->get();
             auto raws = db(
@@ -143,9 +143,6 @@ inline auto InitConfig() noexcept
     system("chcp 65001 && cls");
 #endif
     std::cout << "Initializing...\n";
-    mi_option_set_enabled(mi_option_show_stats, true);
-    mi_option_set_enabled(mi_option_verbose, true);
-    mi_option_set_enabled(mi_option_show_errors, true);
     std::setlocale(LC_ALL, targetLocaleName);
     std::setlocale(LC_NUMERIC, cLocaleName);
     std::locale::global(std::locale(targetLocaleName));
@@ -155,7 +152,7 @@ inline auto InitConfig() noexcept
     {
         std::ofstream(configName) << DEFAULT_CONFIG;
     }
-    auto globalConfig = json::parse(std::ifstream(configName));
+    auto globalConfig = ordered_json::parse(std::ifstream(configName));
     auto accessToken = globalConfig["access_token"].get<std::string>();
     twobot::Config botConfig = {
         .host = "127.0.0.1",
@@ -191,14 +188,11 @@ std::shared_ptr<yobot::DB_Pool> InitDatabase(const std::shared_ptr<yobot::DB_Con
 
 int main(int argc, char** args)
 {
-    twobot::Config botConfig;
-    std::shared_ptr<yobot::DB_Config> dbConfig;
-    json bossConfig;
-    std::tie(botConfig, dbConfig, bossConfig) = InitConfig();
+    auto [botConfig, dbConfig, bossConfig] = InitConfig();
     auto dbPool = InitDatabase(dbConfig);
     auto instance = twobot::BotInstance::createInstance(botConfig);
 
-    instance->onEvent<GroupMsg>([&instance, &dbPool](const GroupMsg& msg, const std::any& session) {
+    instance->onEvent<GroupMsg>([&instance, &dbPool, &bossConfig](const GroupMsg& msg, const std::any& session) {
         auto sessionSet = instance->getApiSet(session);
 
         if (msg.raw_message == "你好")
@@ -208,20 +202,28 @@ int main(int argc, char** args)
         if (msg.raw_message == "进度")
         {
             auto group = yobot::Group(dbPool, msg.group_id);
-            std::int64_t bossCycle;
-            std::string gameServer;
-            json chalList, subList;
-            json thisHPList, nextHPList;
             auto status = group.getStatus();
             if (status)
             {
                 std::cout << status << std::endl;
-                std::tie(bossCycle, gameServer, subList, chalList, thisHPList, nextHPList) = *status;
-                std::string message = std::format("现在是第{}周目：", bossCycle);
+                auto&& [bossCycle, gameServer, subList, chalList, thisHPList, nextHPList] = std::move(*status);
+				auto level = [bossCycle, bossConfig, gameServer] {
+					char ret = 0;
+					for (auto&& lv : bossConfig["level_by_cycle"][gameServer])
+					{
+						if (bossCycle > lv[0] && bossCycle <= lv[1])
+							return ret;
+						ret++;
+					}
+					return ret;
+				}();
+				std::string message = std::format("现在是{}阶段，第{}周目：", (level + 'A'), bossCycle);
                 for (size_t i = 1; i <= 5; i++)
                 {
-                    bool chanllenging = !chalList.is_discarded() && !chalList[std::to_string(i)].is_null();
-                    auto health = (thisHPList[std::to_string(i)] == 0 ? nextHPList[std::to_string(i)].get<std::int64_t>() : 0);
+                    auto strI = std::to_string(i);
+                    bool chanllenging = !chalList.is_discarded() && !chalList[strI].is_null();
+					auto thisHP = (thisHPList[strI] == 0 ? nextHPList[strI] : thisHPList[strI]).get<std::int64_t>();
+                    auto fullHP = bossConfig["boss"][strI];
                     message += std::format("\n{}.【{:■<{}}{:□<{}}】{}人", i, "", i, "", i, (chanllenging?"有":"无"));
                 }
             }
