@@ -25,6 +25,55 @@ find_package(TwoBot CONFIG REQUIRED)
 find_package(async_simple CONFIG REQUIRED)
 find_package(mimalloc CONFIG REQUIRED)
 
+macro(get_git_hash _git_hash)
+  find_package(Git QUIET)
+  if(GIT_FOUND)
+    execute_process(
+      COMMAND ${GIT_EXECUTABLE} log -1 --pretty=format:%H
+      OUTPUT_VARIABLE ${_git_hash}
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+      WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+  endif()
+endmacro()
+
+macro(get_git_branch _git_branch)
+  find_package(Git QUIET)
+  if(GIT_FOUND)
+    execute_process(
+      COMMAND ${GIT_EXECUTABLE} symbolic-ref --short -q HEAD
+      OUTPUT_VARIABLE ${_git_branch}
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+      WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+  endif()
+endmacro()
+
+macro(get_git_date_time _git_date_time)
+  find_package(Git QUIET)
+  if(GIT_FOUND)
+    execute_process(
+      COMMAND ${GIT_EXECUTABLE} log -1 --format=%cd --date=short
+      OUTPUT_VARIABLE ${_git_date_time}
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+      WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    )
+  endif()
+endmacro()
+
+set(GIT_HASH "unknown")
+get_git_hash(GIT_HASH)
+add_definitions(-DGIT_VERSION="${GIT_HASH}")
+
+set(GIT_BRANCH "unknown") 
+get_git_branch(GIT_BRANCH)
+add_definitions(-DGIT_BRANCH="${GIT_BRANCH}")
+
+set(GIT_DATE "unknown") 
+get_git_date_time(GIT_DATE)
+add_definitions(-DGIT_DATE="${GIT_DATE}")
+
+
 add_executable(${PROJECT_NAME} ${FILE_LIST})
 
 target_link_libraries(${PROJECT_NAME} PRIVATE spdlog::spdlog_header_only TwoBot::TwoBot sqlpp11::sqlite3 async_simple::async_simple $<IF:$<TARGET_EXISTS:mimalloc-static>,mimalloc-static,mimalloc>)

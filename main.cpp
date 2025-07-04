@@ -17,6 +17,7 @@ using namespace twobot::Event;
 using nlohmann::json;
 using nlohmann::ordered_json;
 
+constexpr auto versionInfo = "Branch: " GIT_BRANCH "\nCommit: " GIT_VERSION "\nDate: " GIT_DATE;
 constexpr auto targetLocaleName = "zh_CN.UTF-8";
 constexpr auto cLocaleName = "C";
 constexpr auto dbName = "yobotdata_new.db";
@@ -195,9 +196,9 @@ int main(int argc, char** args)
     instance->onEvent<GroupMsg>([&instance, &dbPool, &bossConfig](const GroupMsg& msg, const std::any& session) {
         auto sessionSet = instance->getApiSet(session);
 
-        if (msg.raw_message == "你好")
+        if (msg.raw_message == "version")
         {
-            sessionSet.sendGroupMsg(msg.group_id, "你好，我是yobotpp！");
+            sessionSet.sendGroupMsg(msg.group_id, versionInfo);
         }
         if (msg.raw_message == "进度")
         {
