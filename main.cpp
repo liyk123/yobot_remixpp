@@ -6,6 +6,7 @@
 #include <sqlpp11/sqlpp11.h>
 #include <sqlpp11/sqlite3/sqlite3.h>
 #include <async_simple/coro/Lazy.h>
+#include <httplib.h>
 #include "yobotdata_new.h"
 #include "default_config.h"
 #include "yobotdata_new.sql.h"
@@ -249,8 +250,21 @@ int main(int argc, char** args)
         }
         if (msg.raw_message == "更新会战数据")
         {
+            auto group = yobot::Group(dbPool, msg.group_id);
+            auto status = group.getStatus();
+            if (status)
+            {
+                httplib::Client client("https://pcr.satroki.tech");
+                auto result = client.Get("/api/Quest/GetClanBattleInfos?s=" + std::get<1>(*status));
+                if (result && result->status == 200)
+                {
+                    auto clanBattleInfo = ordered_json::parse(result->body);
+                    auto &lastInfo = *(clanBattleInfo.rbegin());
+                    std::cout << lastInfo << std::endl;
+                }
+                sessionSet.sendGroupMsg(msg.group_id, "更新成功");
+            }
             
-            sessionSet.sendGroupMsg(msg.group_id, "更新成功");
         }
     });
 
