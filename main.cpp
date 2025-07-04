@@ -14,14 +14,20 @@
 
 using namespace nlohmann::json_literals;
 using namespace twobot::Event;
-using nlohmann::json;
-using nlohmann::ordered_json;
+using json = nlohmann::basic_json<std::map, std::vector, std::string, bool, int64_t, uint64_t, double, mi_stl_allocator>;
+using ordered_json = nlohmann::basic_json<nlohmann::ordered_map, std::vector, std::string, bool, int64_t, uint64_t, double, mi_stl_allocator>;
 
 constexpr auto versionInfo = "Branch: " GIT_BRANCH "\nCommit: " GIT_VERSION "\nDate: " GIT_DATE;
 constexpr auto targetLocaleName = "zh_CN.UTF-8";
 constexpr auto cLocaleName = "C";
 constexpr auto dbName = "yobotdata_new.db";
 constexpr auto configName = "yobot_config.json";
+
+template <typename T, class... Args>
+std::shared_ptr<T> make_mi_shared(Args&&... args)
+{
+    return std::allocate_shared<T>(mi_stl_allocator<T>(), std::forward<Args>(args)...);
+}
 
 namespace yobot {
     namespace cqcode {
@@ -68,8 +74,10 @@ namespace yobot {
         Group(Group&&) = default;
 
     public:
-        auto getStatus() -> std::optional<std::tuple<std::int64_t, std::string, json, json, json, json>>
-        {            
+        using status = std::tuple<std::int64_t, std::string, json, json, json, json>;
+        std::optional<status> getStatus()
+        {
+            std::optional<status> ret = std::nullopt;
             auto db = m_pool->get();
             auto raws = db(
                 sqlpp::select(sqlpp::all_of(m_clanGroup))
@@ -82,7 +90,7 @@ namespace yobot {
                 {
                     break;
                 }
-                return tools::make_optional_tuple(
+                ret = std::make_optional<status>(
                     raw.bossCycle.value(),
                     raw.gameServer.value(),
                     json::parse(raw.challengingMemberList.value(), nullptr, false),
@@ -91,10 +99,10 @@ namespace yobot {
                     json::parse(raw.nextCycleBossHealth.value())
                 );
             }
-            return std::nullopt;
+            return ret;
 		}
 
-        bool setStatus(const std::int64_t& bossCycle, const json& nowCycleBossHealth, const json& nextCycleBossHealth)
+		bool setStatus(const std::int64_t& bossCycle, const json& nowCycleBossHealth, const json& nextCycleBossHealth)
         {
             bool ret = false;
             auto db = m_pool->get();
@@ -134,12 +142,45 @@ namespace yobot {
         data::ClanGroup m_clanGroup;
     };
 
+    inline std::int64_t getLevel(const std::int64_t bossCycle, const std::string& gameServer, const ordered_json& globalConfig)
+    {
+        char ret = 0;
+        auto& levelList = globalConfig["level_by_cycle"][gameServer].get_ref<const ordered_json::array_t&>();
+        for (auto&& lv : levelList)
+        {
+            if (bossCycle >= lv[0] && bossCycle <= lv[1])
+            {
+                break;
+            }
+            ret++;
+        }
+        return ret;
+    }
 
-
+    std::string renderStatusText(std::optional<Group::status>& status, const ordered_json& globalConfig)
+    {
+        std::cout << status << std::endl;
+        const auto&& [bossCycle, gameServer, subList, chalList, thisHPList, nextHPList] = std::move(*status);
+        auto level = getLevel(bossCycle, gameServer, globalConfig);
+        std::string message = std::format("现在是{}阶段，第{}周目：", (char)(level + 'A'), bossCycle);
+        auto& levelHPList = globalConfig["boss"][gameServer][level].get_ref<const ordered_json::array_t&>();
+        for (size_t i = 1; i <= 5; i++)
+        {
+            auto strI = std::to_string(i);
+            bool chanllenging = !chalList.is_discarded() && !chalList[strI].is_null();
+            auto& HPList = (thisHPList[strI] == 0 ? nextHPList : thisHPList);
+            auto HP = HPList[strI].get<std::int64_t>();
+            auto fullHP = levelHPList[i - 1].get<std::int64_t>();
+			std::int64_t rate = HP * 10 / fullHP + (HP == 0);
+            auto chalStr = (chanllenging ? "有" : "无");
+            message += std::format("\n{}.【{:■<{}}{:□<{}}】{}人", i, "", rate, "", 10 - rate, chalStr);
+        }
+        return message;
+    }
 }
 
 inline auto InitConfig() noexcept
-{
+{   
 #ifdef _WIN32
     system("chcp 65001 && cls");
 #endif
@@ -148,7 +189,7 @@ inline auto InitConfig() noexcept
     std::setlocale(LC_NUMERIC, cLocaleName);
     std::locale::global(std::locale(targetLocaleName));
     std::locale::global(std::locale(cLocaleName, std::locale::numeric));
-    auto dbConfig = std::make_shared<yobot::DB_Config>(dbName, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE);
+    auto dbConfig = make_mi_shared<yobot::DB_Config>(dbName, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE);
     if (!std::filesystem::exists(configName) || std::filesystem::file_size(configName) == 0)
     {
         std::ofstream(configName) << DEFAULT_CONFIG;
@@ -161,12 +202,7 @@ inline auto InitConfig() noexcept
         .ws_port = globalConfig["port"],
         .token = (accessToken.empty() ? std::nullopt : std::make_optional(accessToken))
     };
-    json bossConfig = {
-        {"boss", globalConfig["boss"]},
-        {"level_by_cycle", globalConfig["level_by_cycle"]},
-        {"boss_id", globalConfig["boss_id"]}
-    };
-    return std::make_tuple(botConfig, dbConfig, bossConfig);
+    return std::make_tuple(botConfig, dbConfig, globalConfig);
 }
 
 std::shared_ptr<yobot::DB_Pool> InitDatabase(const std::shared_ptr<yobot::DB_Config> &dbConfig) noexcept
@@ -189,11 +225,11 @@ std::shared_ptr<yobot::DB_Pool> InitDatabase(const std::shared_ptr<yobot::DB_Con
 
 int main(int argc, char** args)
 {
-    auto [botConfig, dbConfig, bossConfig] = InitConfig();
+    auto [botConfig, dbConfig, globalConfig] = InitConfig();
     auto dbPool = InitDatabase(dbConfig);
     auto instance = twobot::BotInstance::createInstance(botConfig);
 
-    instance->onEvent<GroupMsg>([&instance, &dbPool, &bossConfig](const GroupMsg& msg, const std::any& session) {
+    instance->onEvent<GroupMsg>([&instance, &dbPool, &globalConfig](const GroupMsg& msg, const std::any& session) {
         auto sessionSet = instance->getApiSet(session);
 
         if (msg.raw_message == "version")
@@ -204,31 +240,17 @@ int main(int argc, char** args)
         {
             auto group = yobot::Group(dbPool, msg.group_id);
             auto status = group.getStatus();
+            std::string message = "未检测到数据，请先创建公会！";
             if (status)
             {
-                std::cout << status << std::endl;
-                auto&& [bossCycle, gameServer, subList, chalList, thisHPList, nextHPList] = std::move(*status);
-				auto level = [bossCycle, bossConfig, gameServer] {
-					char ret = 0;
-					for (auto&& lv : bossConfig["level_by_cycle"][gameServer])
-					{
-						if (bossCycle > lv[0] && bossCycle <= lv[1])
-							return ret;
-						ret++;
-					}
-					return ret;
-				}();
-				std::string message = std::format("现在是{}阶段，第{}周目：", (level + 'A'), bossCycle);
-                for (size_t i = 1; i <= 5; i++)
-                {
-                    auto strI = std::to_string(i);
-                    bool chanllenging = !chalList.is_discarded() && !chalList[strI].is_null();
-					auto thisHP = (thisHPList[strI] == 0 ? nextHPList[strI] : thisHPList[strI]).get<std::int64_t>();
-                    auto fullHP = bossConfig["boss"][strI];
-                    message += std::format("\n{}.【{:■<{}}{:□<{}}】{}人", i, "", i, "", i, (chanllenging?"有":"无"));
-                }
+                message = yobot::renderStatusText(status, globalConfig);
             }
-			sessionSet.sendGroupMsg(msg.group_id, "操作完成");
+            sessionSet.sendGroupMsg(msg.group_id, message);
+        }
+        if (msg.raw_message == "更新会战数据")
+        {
+            
+            sessionSet.sendGroupMsg(msg.group_id, "更新成功");
         }
     });
 
@@ -276,4 +298,3 @@ int main(int argc, char** args)
 
     return 0;
 }
-
