@@ -12,7 +12,7 @@
     },
     {
       "kind": "git",
-      "baseline": "289a7cdc6db4d69a1c9747ac692647c9ec807451",
+      "baseline": "f79ad68de42252eb5f35f45edaa792757756fd3c",
       "repository": "https://github.com/liyk123/vcpkg",
       "reference": "pcrbotpp",
       "packages": [ "twobot" ]

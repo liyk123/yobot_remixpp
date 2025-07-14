@@ -230,8 +230,8 @@ int main(int argc, char** args)
     auto dbPool = InitDatabase(dbConfig);
     auto instance = twobot::BotInstance::createInstance(botConfig);
 
-    instance->onEvent<GroupMsg>([&instance, &dbPool, &globalConfig](const GroupMsg& msg, const std::any& session) {
-        auto sessionSet = instance->getApiSet(session);
+    instance->onEvent<GroupMsg>([&instance, &dbPool, &globalConfig](const GroupMsg& msg) {
+        auto sessionSet = instance->getApiSet(msg.self_id);
 
         if (msg.raw_message == "version")
         {
@@ -268,8 +268,8 @@ int main(int argc, char** args)
         }
     });
 
-    instance->onEvent<PrivateMsg>([&instance, &dbPool](const PrivateMsg& msg, const std::any& session) {
-        auto sessionSet = instance->getApiSet(session);
+    instance->onEvent<PrivateMsg>([&instance, &dbPool](const PrivateMsg& msg) {
+        auto sessionSet = instance->getApiSet(msg.self_id);
         auto db = dbPool->get();
         if (msg.raw_message == "你好")
         {
@@ -295,15 +295,15 @@ int main(int argc, char** args)
         }
     });
 
-    instance->onEvent<EnableEvent>([&instance](const EnableEvent& msg, const std::any& session) {
+    instance->onEvent<EnableEvent>([&instance](const EnableEvent& msg) {
         std::cout << "yobotpp已启动！ID：" << msg.self_id << std::endl;
     });
 
-    instance->onEvent<DisableEvent>([&instance](const DisableEvent& msg, const std::any& session) {
+    instance->onEvent<DisableEvent>([&instance](const DisableEvent& msg) {
         std::cout << "yobotpp已停止！ID: " << msg.self_id << std::endl;
     });
 
-    instance->onEvent<ConnectEvent>([&instance](const ConnectEvent& msg, const std::any& session) {
+    instance->onEvent<ConnectEvent>([&instance](const ConnectEvent& msg) {
         std::cout << "yobotpp已连接！ID: " << msg.self_id << std::endl;
     });
 
