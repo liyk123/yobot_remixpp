@@ -1,21 +1,15 @@
 {
   "default-registry": {
     "kind": "git",
-    "baseline": "bfed87b1938fbd406b9eef28c281b6219c889ae1",
-    "repository": "https://github.com/microsoft/vcpkg"
+    "baseline": "e50562a0b1ecdcd1a46a256a374bb7682722dcce",
+    "repository": "https://github.com/liyk123/vcpkg",
+    "reference": "pcrbotpp"
   },
   "registries": [
     {
       "kind": "artifact",
       "location": "https://github.com/microsoft/vcpkg-ce-catalog/archive/refs/heads/main.zip",
       "name": "microsoft"
-    },
-    {
-      "kind": "git",
-      "baseline": "f79ad68de42252eb5f35f45edaa792757756fd3c",
-      "repository": "https://github.com/liyk123/vcpkg",
-      "reference": "pcrbotpp",
-      "packages": [ "twobot" ]
     }
   ]
 }
