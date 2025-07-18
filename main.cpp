@@ -7,6 +7,7 @@
 #include <sqlpp11/sqlite3/sqlite3.h>
 #include <async_simple/coro/Lazy.h>
 #include <httplib.h>
+#include <tbb/tbb.h>
 #include "yobotdata_new.h"
 #include "default_config.h"
 #include "yobotdata_new.sql.h"
@@ -56,6 +57,14 @@ namespace yobot {
         }
     }
 
+    namespace area {
+        constexpr std::string_view cn = "cn";
+        constexpr std::string_view tw = "tw";
+        constexpr std::string_view jp = "jp";
+    }
+
+    using BoosData = std::tuple<std::string_view, json::array_t, json::array_t, json::array_t>;
+
     using DB_Pool = sqlpp::sqlite3::connection_pool;
     using DB_Config = sqlpp::sqlite3::connection_config;
 
@@ -103,20 +112,20 @@ namespace yobot {
             return ret;
 		}
 
-		bool setStatus(const std::int64_t& bossCycle, const json& nowCycleBossHealth, const json& nextCycleBossHealth)
+		bool setStatus(const std::int64_t& lap, const json& thisLapBossHealth, const json& nextLapBossHealth)
         {
             bool ret = false;
             auto db = m_pool->get();
-            if (isStatusLegal(bossCycle, nowCycleBossHealth, nextCycleBossHealth))
+            if (isStatusLegal(lap, thisLapBossHealth, nextLapBossHealth))
             {
                 db(
                     sqlpp::update(m_clanGroup)
                     .set(
                         m_clanGroup.challengingMemberList = sqlpp::null,
                         m_clanGroup.subscribeList = sqlpp::null,
-                        m_clanGroup.bossCycle = bossCycle,
-                        m_clanGroup.nowCycleBossHealth = nowCycleBossHealth.dump(),
-                        m_clanGroup.nextCycleBossHealth = nextCycleBossHealth.dump()
+                        m_clanGroup.bossCycle = lap,
+                        m_clanGroup.nowCycleBossHealth = thisLapBossHealth.dump(),
+                        m_clanGroup.nextCycleBossHealth = nextLapBossHealth.dump()
                     )
                     .where(m_clanGroup.groupId == m_groupID)
                 );
@@ -143,13 +152,13 @@ namespace yobot {
         data::ClanGroup m_clanGroup;
     };
 
-    inline std::int64_t getLevel(const std::int64_t bossCycle, const std::string& gameServer, const ordered_json& globalConfig)
+    inline std::int8_t getPhase(const std::int64_t lap, const std::string& gameServer, const ordered_json& globalConfig)
     {
         char ret = 0;
-        auto& levelList = globalConfig["level_by_cycle"][gameServer].get_ref<const ordered_json::array_t&>();
-        for (auto&& lv : levelList)
+        auto& phaseList = globalConfig["lap_range"][gameServer].get_ref<const ordered_json::array_t&>();
+        for (auto&& range : phaseList)
         {
-            if (bossCycle >= lv[0] && bossCycle <= lv[1])
+            if (lap >= range[0] && lap <= range[1])
             {
                 break;
             }
@@ -158,25 +167,80 @@ namespace yobot {
         return ret;
     }
 
-    std::string renderStatusText(std::optional<Group::status>& status, const ordered_json& globalConfig)
+    std::string renderStatusText(Group::status& status, const ordered_json& globalConfig)
     {
         std::cout << status << std::endl;
-        const auto&& [bossCycle, gameServer, subList, chalList, thisHPList, nextHPList] = std::move(*status);
-        auto level = getLevel(bossCycle, gameServer, globalConfig);
-        std::string message = std::format("现在是{}阶段，第{}周目：", (char)(level + 'A'), bossCycle);
-        auto& levelHPList = globalConfig["boss"][gameServer][level].get_ref<const ordered_json::array_t&>();
+        const auto&& [lap, gameServer, subList, chalList, thisHPList, nextHPList] = std::move(status);
+        auto phase = getPhase(lap, gameServer, globalConfig);
+        std::string message = std::format("现在是{}阶段，第{}周目：", (char)(phase + 'A'), lap);
+        auto& lapHPList = globalConfig["boss_hp"][gameServer][phase].get_ref<const ordered_json::array_t&>();
         for (size_t i = 1; i <= 5; i++)
         {
             auto strI = std::to_string(i);
             bool chanllenging = !chalList.is_discarded() && !chalList[strI].is_null();
             auto& HPList = (thisHPList[strI] == 0 ? nextHPList : thisHPList);
             auto HP = HPList[strI].get<std::int64_t>();
-            auto fullHP = levelHPList[i - 1].get<std::int64_t>();
+            auto fullHP = lapHPList[i - 1].get<std::int64_t>();
 			std::int64_t rate = HP * 10 / fullHP + (HP == 0);
             auto chalStr = (chanllenging ? "有" : "无");
             message += std::format("\n{}.【{:■<{}}{:□<{}}】{}人", i, "", rate, "", 10 - rate, chalStr);
         }
         return message;
+    }
+
+    inline void fetchBossData(BoosData& bossData)
+    {
+        auto&& [itArea, itBossHP, itLapRange, itBossId] = bossData;
+        httplib::Client client("https://pcr.satroki.tech");
+        //"https://pcr.satroki.tech/icon/unit/";
+        auto result = client.Get("/api/Quest/GetClanBattleInfos?s=" + std::string(itArea));
+        if (result && result->status == 200)
+        {
+            auto clanBattleInfo = json::parse(std::string_view(result->body));
+            auto& lastInfo = *(clanBattleInfo.rbegin());
+            auto& phases = lastInfo["phases"];
+            if (phases.is_array())
+            {
+                auto ait = phases.begin();
+                for (auto&& boss : (*ait)["bosses"])
+                {
+                    itBossId.push_back(boss["unitId"]);
+                }
+                for (; ait != phases.end(); ait++)
+                {
+                    json::array_t bossHP;
+                    for (auto&& boss : (*ait)["bosses"])
+                    {
+                        bossHP.push_back(boss["hp"]);
+                    }
+                    itBossHP.push_back(bossHP);
+                    itLapRange.push_back(json::array({ (*ait)["lapFrom"], (*ait)["lapTo"] }));
+                }
+                *(itLapRange.rbegin()->rbegin()) = 999;
+            }
+        }
+    }
+
+    void updateBossData(ordered_json& globalConfig)
+    {
+		std::vector<yobot::BoosData> vBossData = {
+	        {yobot::area::cn, {}, {}, {}},
+	        {yobot::area::tw, {}, {}, {}},
+	        {yobot::area::jp, {}, {}, {}}
+		};
+        tbb::parallel_for(0ULL, vBossData.size(), [&](std::size_t it) {
+            yobot::fetchBossData(vBossData[it]);
+            });
+        ordered_json jbossData;
+        for (auto&& x : vBossData)
+        {
+            auto& [a, b, c, d] = x;
+            jbossData["boss_HP"][a] = b;
+            jbossData["lap_range"][a] = c;
+            jbossData["boss_id"][a] = d;
+        }
+        globalConfig.merge_patch(jbossData);
+        std::ofstream(configName) << globalConfig.dump(4) << std::endl;
     }
 }
 
@@ -208,7 +272,7 @@ inline auto InitConfig() noexcept
 
 std::shared_ptr<yobot::DB_Pool> InitDatabase(const std::shared_ptr<yobot::DB_Config> &dbConfig) noexcept
 {
-    auto dbPool = std::make_shared<yobot::DB_Pool>(dbConfig, 2);
+    auto dbPool = make_mi_shared<yobot::DB_Pool>(dbConfig, 2);
     auto db = dbPool->get();
 	for (auto&& line : YOBOT_DATA_NEW_SQL)
 	{
@@ -244,45 +308,18 @@ int main(int argc, char** args)
             std::string message = "未检测到数据，请先创建公会！";
             if (status)
             {
-                message = yobot::renderStatusText(status, globalConfig);
+                message = yobot::renderStatusText(*status, globalConfig);
             }
             sessionSet.sendGroupMsg(msg.group_id, message);
         }
-        if (msg.raw_message == "更新会战数据")
-        {
-            auto group = yobot::Group(dbPool, msg.group_id);
-            auto status = group.getStatus();
-            if (status)
-            {
-                httplib::Client client("https://pcr.satroki.tech");
-                auto result = client.Get("/api/Quest/GetClanBattleInfos?s=" + std::get<1>(*status));
-                if (result && result->status == 200)
-                {
-                    auto clanBattleInfo = ordered_json::parse(result->body);
-                    auto &lastInfo = *(clanBattleInfo.rbegin());
-                    std::cout << lastInfo << std::endl;
-                }
-                sessionSet.sendGroupMsg(msg.group_id, "更新成功");
-            }
-            
-        }
     });
 
-    instance->onEvent<PrivateMsg>([&instance, &dbPool](const PrivateMsg& msg) {
+    instance->onEvent<PrivateMsg>([&instance, &dbPool, &globalConfig](const PrivateMsg& msg) {
         auto sessionSet = instance->getApiSet(msg.self_id);
         auto db = dbPool->get();
         if (msg.raw_message == "你好")
         {
             sessionSet.sendPrivateMsg(msg.user_id, "你好，我是yobotpp！");
-        }
-        if (msg.raw_message == "进度")
-        {
-            std::string message = "现在是阶段B，第1周目：";
-            for (int i = 0; i < 5; i++)
-            {
-                message += std::format("\n{}.【{:■<{}}{:□<{}}】{}", i + 1, "", 5 - i, "", 5 + i, (i % 2 ? "有人" : ""));
-            }
-            sessionSet.sendPrivateMsg(msg.user_id, message);
         }
         if (msg.raw_message == "用户列表")
         {
@@ -292,6 +329,11 @@ int main(int argc, char** args)
                 std::cout << raw.qqid << std::endl;
             }
             sessionSet.sendPrivateMsg(msg.user_id, "操作完成");
+        }
+        if (msg.raw_message == "更新会战数据")
+        {
+            yobot::updateBossData(globalConfig);
+            sessionSet.sendPrivateMsg(msg.user_id, "更新成功");
         }
     });
 
