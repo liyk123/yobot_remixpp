@@ -294,12 +294,12 @@ int main(int argc, char** args)
     auto dbPool = InitDatabase(dbConfig);
     auto instance = twobot::BotInstance::createInstance(botConfig);
 
-    instance->onEvent<GroupMsg>([&instance, &dbPool, &globalConfig](const GroupMsg& msg) {
+    instance->onEvent<GroupMsg>([&instance, &dbPool, &globalConfig](const GroupMsg& msg) -> coro::task<> {
         auto sessionSet = instance->getApiSet(msg.self_id);
 
         if (msg.raw_message == "version")
         {
-            sessionSet.sendGroupMsg(msg.group_id, versionInfo);
+            co_await sessionSet.sendGroupMsg(msg.group_id, versionInfo);
         }
         if (msg.raw_message == "进度")
         {
@@ -310,16 +310,17 @@ int main(int argc, char** args)
             {
                 message = yobot::renderStatusText(*status, globalConfig);
             }
-            sessionSet.sendGroupMsg(msg.group_id, message);
+            co_await sessionSet.sendGroupMsg(msg.group_id, message);
         }
+        co_return;
     });
 
-    instance->onEvent<PrivateMsg>([&instance, &dbPool, &globalConfig](const PrivateMsg& msg) {
+    instance->onEvent<PrivateMsg>([&instance, &dbPool, &globalConfig](const PrivateMsg& msg) -> coro::task<> {
         auto sessionSet = instance->getApiSet(msg.self_id);
         auto db = dbPool->get();
         if (msg.raw_message == "你好")
         {
-            sessionSet.sendPrivateMsg(msg.user_id, "你好，我是yobotpp！");
+            co_await sessionSet.sendPrivateMsg(msg.user_id, "你好，我是yobotpp！");
         }
         if (msg.raw_message == "用户列表")
         {
@@ -328,25 +329,29 @@ int main(int argc, char** args)
             {
                 std::cout << raw.qqid << std::endl;
             }
-            sessionSet.sendPrivateMsg(msg.user_id, "操作完成");
+            co_await sessionSet.sendPrivateMsg(msg.user_id, "操作完成");
         }
         if (msg.raw_message == "更新会战数据")
         {
             yobot::updateBossData(globalConfig);
-            sessionSet.sendPrivateMsg(msg.user_id, "更新成功");
+            co_await sessionSet.sendPrivateMsg(msg.user_id, "更新成功");
         }
+        co_return;
     });
 
-    instance->onEvent<EnableEvent>([&instance](const EnableEvent& msg) {
+    instance->onEvent<EnableEvent>([&instance](const EnableEvent& msg) -> coro::task<> {
         std::cout << "yobotpp已启动！ID：" << msg.self_id << std::endl;
+        co_return;
     });
 
-    instance->onEvent<DisableEvent>([&instance](const DisableEvent& msg) {
+    instance->onEvent<DisableEvent>([&instance](const DisableEvent& msg) -> coro::task<> {
         std::cout << "yobotpp已停止！ID: " << msg.self_id << std::endl;
+        co_return;
     });
 
-    instance->onEvent<ConnectEvent>([&instance](const ConnectEvent& msg) {
+    instance->onEvent<ConnectEvent>([&instance](const ConnectEvent& msg) -> coro::task<> {
         std::cout << "yobotpp已连接！ID: " << msg.self_id << std::endl;
+        co_return;
     });
 
     std::cout << "Start listening:" << botConfig.ws_port << std::endl;

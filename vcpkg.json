@@ -11,6 +11,10 @@
       "default-features": false
     },
     "mimalloc",
+    {
+      "name": "libcoro",
+      "default-features": false
+    },
     "twobot"
   ]
 }
