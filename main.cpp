@@ -15,20 +15,14 @@
 
 using namespace nlohmann::json_literals;
 using namespace twobot::Event;
-using json = nlohmann::basic_json<std::map, std::vector, std::string, bool, int64_t, uint64_t, double, mi_stl_allocator>;
-using ordered_json = nlohmann::basic_json<nlohmann::ordered_map, std::vector, std::string, bool, int64_t, uint64_t, double, mi_stl_allocator>;
+using nlohmann::json;
+using nlohmann::ordered_json;
 
 constexpr auto versionInfo = "Branch: " GIT_BRANCH "\nCommit: " GIT_VERSION "\nDate: " GIT_DATE;
 constexpr auto targetLocaleName = "zh_CN.UTF-8";
 constexpr auto cLocaleName = "C";
 constexpr auto dbName = "yobotdata_new.db";
 constexpr auto configName = "yobot_config.json";
-
-template <typename T, class... Args>
-std::shared_ptr<T> make_mi_shared(Args&&... args)
-{
-    return std::allocate_shared<T>(mi_stl_allocator<T>(), std::forward<Args>(args)...);
-}
 
 namespace yobot {
     namespace cqcode {
@@ -48,14 +42,6 @@ namespace yobot {
         }
     }
 
-    namespace tools {
-        template <typename... Args>
-        inline auto make_optional_tuple(Args&&... args)
-        {
-            return std::make_optional(std::make_tuple(std::forward<Args>(args)...));
-        }
-    }
-
     namespace area {
         constexpr std::string_view cn = "cn";
         constexpr std::string_view tw = "tw";
@@ -66,6 +52,64 @@ namespace yobot {
 
     using DB_Pool = sqlpp::sqlite3::connection_pool;
     using DB_Config = sqlpp::sqlite3::connection_config;
+
+    static auto InitConfig() noexcept
+    {
+#ifdef _WIN32
+        //system("chcp 65001 && cls");
+#endif
+        std::cout << "Initializing...\n";
+        std::setlocale(LC_ALL, targetLocaleName);
+        std::setlocale(LC_NUMERIC, cLocaleName);
+        std::locale::global(std::locale(targetLocaleName));
+        std::locale::global(std::locale(cLocaleName, std::locale::numeric));
+        auto dbConfig = std::make_shared<yobot::DB_Config>(dbName, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE);
+        if (!std::filesystem::exists(configName) || std::filesystem::file_size(configName) == 0)
+        {
+            std::ofstream(configName) << DEFAULT_CONFIG;
+        }
+        auto globalConfig = ordered_json::parse(std::ifstream(configName));
+        auto accessToken = globalConfig["access_token"].get<std::string>();
+        twobot::Config botConfig = {
+            .host = "127.0.0.1",
+            .api_port = 5700,
+            .ws_port = globalConfig["port"],
+            .token = (accessToken.empty() ? std::nullopt : std::make_optional(accessToken))
+        };
+        return std::make_tuple(botConfig, dbConfig, globalConfig);
+    }
+
+    static std::shared_ptr<yobot::DB_Pool> InitDatabase(const std::shared_ptr<yobot::DB_Config>& dbConfig) noexcept
+    {
+        auto dbPool = std::make_shared<yobot::DB_Pool>(dbConfig, 2);
+        auto db = dbPool->get();
+        for (auto&& line : YOBOT_DATA_NEW_SQL)
+        {
+            try
+            {
+                db.execute(line);
+            }
+            catch (sqlpp::exception ignore)
+            {
+
+            }
+        }
+        return dbPool;
+    }
+
+    static auto construct()
+    {
+        auto&& [botConfig, dbConfig, globalConfig] = InitConfig();
+        auto dbPool = InitDatabase(dbConfig);
+        auto instance = twobot::BotInstance::createInstance(botConfig);
+        return std::make_tuple(std::move(instance), dbPool, globalConfig);
+    }
+
+    static auto getInstance()
+    {
+        static auto g_instance = std::make_shared<decltype(construct())>(construct());
+        return g_instance;
+    }
 
     class Group
     {
@@ -191,7 +235,7 @@ namespace yobot {
     {
         auto&& [itArea, itBossHP, itLapRange, itBossId] = bossData;
         httplib::Client client("https://pcr.satroki.tech");
-        //"https://pcr.satroki.tech/icon/unit/";
+        client.set_follow_location(true);
         auto result = client.Get("/api/Quest/GetClanBattleInfos?s=" + std::string(itArea));
         if (result && result->status == 200)
         {
@@ -203,6 +247,10 @@ namespace yobot {
                 auto ait = phases.begin();
                 for (auto&& boss : (*ait)["bosses"])
                 {
+					if (auto g = client.Get("/icon/unit/" + std::to_string(boss["unitId"].get<json::number_unsigned_t>()) + ".webp"))
+                    {
+						std::ofstream(std::string(itArea) + std::to_string(boss["unitId"].get<json::number_unsigned_t>()) + ".webp", std::ios::binary) << g->body;
+                    }
                     itBossId.push_back(boss["unitId"]);
                 }
                 for (; ait != phases.end(); ait++)
@@ -229,7 +277,7 @@ namespace yobot {
 		};
         tbb::parallel_for(0ULL, vBossData.size(), [&](std::size_t it) {
             yobot::fetchBossData(vBossData[it]);
-            });
+        });
         ordered_json jbossData;
         for (auto&& x : vBossData)
         {
@@ -243,62 +291,18 @@ namespace yobot {
     }
 }
 
-inline auto InitConfig() noexcept
-{   
-#ifdef _WIN32
-    system("chcp 65001 && cls");
-#endif
-    std::cout << "Initializing...\n";
-    std::setlocale(LC_ALL, targetLocaleName);
-    std::setlocale(LC_NUMERIC, cLocaleName);
-    std::locale::global(std::locale(targetLocaleName));
-    std::locale::global(std::locale(cLocaleName, std::locale::numeric));
-    auto dbConfig = make_mi_shared<yobot::DB_Config>(dbName, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE);
-    if (!std::filesystem::exists(configName) || std::filesystem::file_size(configName) == 0)
-    {
-        std::ofstream(configName) << DEFAULT_CONFIG;
-    }
-    auto globalConfig = ordered_json::parse(std::ifstream(configName));
-    auto accessToken = globalConfig["access_token"].get<std::string>();
-    twobot::Config botConfig = {
-        .host = "127.0.0.1",
-        .api_port = 5700,
-        .ws_port = globalConfig["port"],
-        .token = (accessToken.empty() ? std::nullopt : std::make_optional(accessToken))
-    };
-    return std::make_tuple(botConfig, dbConfig, globalConfig);
-}
-
-std::shared_ptr<yobot::DB_Pool> InitDatabase(const std::shared_ptr<yobot::DB_Config> &dbConfig) noexcept
-{
-    auto dbPool = make_mi_shared<yobot::DB_Pool>(dbConfig, 2);
-    auto db = dbPool->get();
-	for (auto&& line : YOBOT_DATA_NEW_SQL)
-	{
-        try 
-        {
-            db.execute(line);
-        }
-        catch (sqlpp::exception ignore)
-        {
-            
-        }
-	}
-    return dbPool;
-}
-
 int main(int argc, char** args)
 {
-    auto [botConfig, dbConfig, globalConfig] = InitConfig();
-    auto dbPool = InitDatabase(dbConfig);
-    auto instance = twobot::BotInstance::createInstance(botConfig);
+    static int MI_VERSION = mi_version();
+	auto&& [twobot, _, globalConfig] = *yobot::getInstance();
 
-    instance->onEvent<GroupMsg>([&instance, &dbPool, &globalConfig](const GroupMsg& msg) -> coro::task<> {
-        auto sessionSet = instance->getApiSet(msg.self_id);
+    twobot->onEvent<GroupMsg>([&twobot](const GroupMsg& msg) -> coro::task<> {
+        auto&& [_, dbPool, globalConfig] = *yobot::getInstance();
+        auto apiSet = twobot->getApiSet(msg.self_id);
 
         if (msg.raw_message == "version")
         {
-            co_await sessionSet.sendGroupMsg(msg.group_id, versionInfo);
+            co_await apiSet.sendGroupMsg(msg.group_id, versionInfo);
         }
         if (msg.raw_message == "进度")
         {
@@ -309,52 +313,57 @@ int main(int argc, char** args)
             {
                 message = yobot::renderStatusText(*status, globalConfig);
             }
-            co_await sessionSet.sendGroupMsg(msg.group_id, message);
+            co_await apiSet.sendGroupMsg(msg.group_id, message);
         }
         co_return;
     });
 
-    instance->onEvent<PrivateMsg>([&instance, &dbPool, &globalConfig](const PrivateMsg& msg) -> coro::task<> {
-        auto sessionSet = instance->getApiSet(msg.self_id);
+    twobot->onEvent<PrivateMsg>([&twobot](const PrivateMsg& msg) -> coro::task<> {
+        auto&& [_, dbPool, globalConfig] = *yobot::getInstance();
+        auto apiSet = twobot->getApiSet(msg.self_id);
         auto db = dbPool->get();
+        if (msg.raw_message == "version")
+        {
+            co_await apiSet.sendPrivateMsg(msg.user_id, versionInfo);
+        }
         if (msg.raw_message == "你好")
         {
-            co_await sessionSet.sendPrivateMsg(msg.user_id, "你好，我是yobotpp！");
+            co_await apiSet.sendPrivateMsg(msg.user_id, "你好，我是yobotpp！");
         }
-        if (msg.raw_message == "用户列表")
+        if (msg.raw_message == "统计")
         {
+            using sqlpp::select;
+            using sqlpp::count;
+            using sqlpp::distinct;
             yobot::data::User user = {};
-            for (const auto& raw : db(sqlpp::select(user.qqid).from(user).unconditionally()))
-            {
-                std::cout << raw.qqid << std::endl;
-            }
-            co_await sessionSet.sendPrivateMsg(msg.user_id, "操作完成");
+            std::size_t userCount = db(
+                select(count(user.qqid))
+                .from(user)
+                .unconditionally()
+            ).begin()->count;
+            std::size_t groupCount = db(
+                select(count(distinct, user.clanGroupId))
+                .from(user)
+                .unconditionally()
+            ).begin()->count;
+            auto message = std::format("用户总数：{}\n群组总数：{}", userCount, groupCount);
+            co_await apiSet.sendPrivateMsg(msg.user_id, message);
         }
-        if (msg.raw_message == "更新会战数据")
+        if (msg.raw_message == "更新数据")
         {
             yobot::updateBossData(globalConfig);
-            co_await sessionSet.sendPrivateMsg(msg.user_id, "更新成功");
+            co_await apiSet.sendPrivateMsg(msg.user_id, "更新成功");
         }
         co_return;
     });
 
-    instance->onEvent<EnableEvent>([&instance](const EnableEvent& msg) -> coro::task<> {
-        std::cout << "yobotpp已启动！ID：" << msg.self_id << std::endl;
-        co_return;
-    });
-
-    instance->onEvent<DisableEvent>([&instance](const DisableEvent& msg) -> coro::task<> {
-        std::cout << "yobotpp已停止！ID: " << msg.self_id << std::endl;
-        co_return;
-    });
-
-    instance->onEvent<ConnectEvent>([&instance](const ConnectEvent& msg) -> coro::task<> {
+    twobot->onEvent<ConnectEvent>([&twobot](const ConnectEvent& msg) -> coro::task<> {
         std::cout << "yobotpp已连接！ID: " << msg.self_id << std::endl;
         co_return;
     });
 
-    std::cout << "Start listening:" << botConfig.ws_port << std::endl;
-    instance->start();
+    std::cout << "Start listening:" << globalConfig["port"] << std::endl;
+    twobot->start();
 
     return 0;
 }
