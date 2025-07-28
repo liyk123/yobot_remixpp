@@ -5,7 +5,6 @@
 #include <twobot.hh>
 #include <sqlpp11/sqlpp11.h>
 #include <sqlpp11/sqlite3/sqlite3.h>
-#include <async_simple/coro/Lazy.h>
 #include <httplib.h>
 #include <tbb/tbb.h>
 #include "yobotdata_new.h"

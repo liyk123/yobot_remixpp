@@ -5,7 +5,6 @@
       "name": "sqlpp11",
       "features": [ "sqlite3" ]
     },
-    "async-simple",
     {
       "name": "cpp-httplib",
       "default-features": false
