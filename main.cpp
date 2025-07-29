@@ -23,12 +23,17 @@ constexpr auto targetLocaleName = "zh_CN.UTF-8";
 constexpr auto cLocaleName = "C";
 constexpr auto dbName = "yobotdata_new.db";
 constexpr auto configName = "yobot_config.json";
+constexpr auto iconDir = "icon";
 
 namespace yobot {
+    using BoosData = std::tuple<std::string_view, json::array_t, json::array_t, json::array_t>;
+    using DB_Pool = sqlpp::sqlite3::connection_pool;
+    using DB_Config = sqlpp::sqlite3::connection_config;
+
     namespace cqcode {
         inline constexpr std::string cq(const char* op, auto id)
         {
-			return std::format("[CQ:{},qq={}]", op, id);
+            return std::format("[CQ:{},qq={}]", op, id);
         }
 
         inline constexpr std::string at(auto id)
@@ -47,11 +52,6 @@ namespace yobot {
         constexpr std::string_view tw = "tw";
         constexpr std::string_view jp = "jp";
     }
-
-    using BoosData = std::tuple<std::string_view, json::array_t, json::array_t, json::array_t>;
-
-    using DB_Pool = sqlpp::sqlite3::connection_pool;
-    using DB_Config = sqlpp::sqlite3::connection_config;
 
     static auto InitConfig() noexcept
     {
@@ -102,6 +102,7 @@ namespace yobot {
         auto&& [botConfig, dbConfig, globalConfig] = InitConfig();
         auto dbPool = InitDatabase(dbConfig);
         auto instance = twobot::BotInstance::createInstance(botConfig);
+        std::filesystem::create_directory(iconDir);
         return std::make_tuple(std::move(instance), dbPool, globalConfig);
     }
 
@@ -114,7 +115,7 @@ namespace yobot {
     class Group
     {
     public:
-        Group(std::shared_ptr<DB_Pool> pool, std::uint64_t groupID) noexcept
+        Group(const std::shared_ptr<DB_Pool> &pool, std::uint64_t groupID) noexcept
             : m_pool(pool)
             , m_groupID(groupID)
             , m_clanGroup()
@@ -133,7 +134,7 @@ namespace yobot {
             std::optional<status> ret = std::nullopt;
             auto db = m_pool->get();
             auto raws = db(
-                sqlpp::select(sqlpp::all_of(m_clanGroup))
+                select(all_of(m_clanGroup))
                 .from(m_clanGroup)
                 .where(m_clanGroup.groupId == m_groupID)
             );
@@ -162,7 +163,7 @@ namespace yobot {
             if (isStatusLegal(lap, thisLapBossHealth, nextLapBossHealth))
             {
                 db(
-                    sqlpp::update(m_clanGroup)
+                    update(m_clanGroup)
                     .set(
                         m_clanGroup.challengingMemberList = sqlpp::null,
                         m_clanGroup.subscribeList = sqlpp::null,
@@ -231,13 +232,13 @@ namespace yobot {
         return message;
     }
 
-    inline void fetchBossData(BoosData& bossData)
+    inline void fetchBossData(BoosData& bossData, tbb::concurrent_unordered_set<json::number_integer_t>& idSet)
     {
         auto&& [itArea, itBossHP, itLapRange, itBossId] = bossData;
         httplib::Client client("https://pcr.satroki.tech");
         client.set_follow_location(true);
         auto result = client.Get("/api/Quest/GetClanBattleInfos?s=" + std::string(itArea));
-        if (result && result->status == 200)
+        if (result && result->status == httplib::OK_200)
         {
             auto clanBattleInfo = json::parse(std::string_view(result->body));
             auto& lastInfo = *(clanBattleInfo.rbegin());
@@ -247,11 +248,9 @@ namespace yobot {
                 auto ait = phases.begin();
                 for (auto&& boss : (*ait)["bosses"])
                 {
-					if (auto g = client.Get("/icon/unit/" + std::to_string(boss["unitId"].get<json::number_unsigned_t>()) + ".webp"))
-                    {
-						std::ofstream(std::string(itArea) + std::to_string(boss["unitId"].get<json::number_unsigned_t>()) + ".webp", std::ios::binary) << g->body;
-                    }
-                    itBossId.push_back(boss["unitId"]);
+                    auto id = boss["unitId"].get<json::number_integer_t>();
+                    idSet.insert(id);
+                    itBossId.push_back(id);
                 }
                 for (; ait != phases.end(); ait++)
                 {
@@ -268,6 +267,25 @@ namespace yobot {
         }
     }
 
+	inline void fetchBossIcon(tbb::concurrent_unordered_set<json::number_integer_t>::range_type range)
+    {
+        httplib::Client client("https://redive.estertion.win");
+        client.set_follow_location(true);
+        for (auto&& id : range)
+        {
+            auto filename = std::to_string(id) + ".webp";
+            auto filepath = std::filesystem::path(std::string(iconDir) + "/" + filename);
+            if (!std::filesystem::exists(filepath))
+            {
+                auto result = client.Get("/icon/unit/" + filename);
+                if (result && result->status == httplib::OK_200)
+                {
+                    std::ofstream(filepath, std::ios::binary) << result->body;
+                }
+            }
+        }
+    }
+
     void updateBossData(ordered_json& globalConfig)
     {
 		std::vector<yobot::BoosData> vBossData = {
@@ -275,8 +293,12 @@ namespace yobot {
 	        {yobot::area::tw, {}, {}, {}},
 	        {yobot::area::jp, {}, {}, {}}
 		};
+        tbb::concurrent_unordered_set<json::number_integer_t> idSet;
         tbb::parallel_for(0ULL, vBossData.size(), [&](std::size_t it) {
-            yobot::fetchBossData(vBossData[it]);
+            fetchBossData(vBossData[it], idSet);
+        });
+        tbb::parallel_for(idSet.range(), [](auto&& range) {
+            fetchBossIcon(range);
         });
         ordered_json jbossData;
         for (auto&& x : vBossData)
@@ -289,6 +311,24 @@ namespace yobot {
         globalConfig.merge_patch(jbossData);
         std::ofstream(configName) << globalConfig.dump(4) << std::endl;
     }
+
+    std::string statistics(const std::shared_ptr<DB_Pool> &dbPool)
+    {
+        auto db = dbPool->get();
+        yobot::data::User user = {};
+        auto userCount = db(
+            select(count(user.qqid))
+            .from(user)
+            .where(user.deleted == 0)
+        ).begin()->count.value();
+        yobot::data::ClanGroup group = {};
+        auto groupCount = db(
+            select(count(group.groupId))
+            .from(group)
+            .where(group.deleted == 0)
+        ).begin()->count.value();
+        return std::format("用户总数：{}\n群组总数：{}", userCount, groupCount);
+    }
 }
 
 int main(int argc, char** args)
@@ -296,68 +336,60 @@ int main(int argc, char** args)
     static int MI_VERSION = mi_version();
 	auto&& [twobot, _, globalConfig] = *yobot::getInstance();
 
-    twobot->onEvent<GroupMsg>([&twobot](const GroupMsg& msg) -> coro::task<> {
-        auto&& [_, dbPool, globalConfig] = *yobot::getInstance();
+    twobot->onEvent<GroupMsg>([](const GroupMsg& msg) -> coro::task<> {
+        auto&& [twobot, dbPool, globalConfig] = *yobot::getInstance();
         auto apiSet = twobot->getApiSet(msg.self_id);
-
+        std::string message = "";
         if (msg.raw_message == "version")
         {
-            co_await apiSet.sendGroupMsg(msg.group_id, versionInfo);
+            message = versionInfo;
         }
         if (msg.raw_message == "进度")
         {
             auto group = yobot::Group(dbPool, msg.group_id);
             auto status = group.getStatus();
-            std::string message = "未检测到数据，请先创建公会！";
+            message = "未检测到数据，请先创建公会！";
             if (status)
             {
                 message = yobot::renderStatusText(*status, globalConfig);
             }
+        }
+        if (!message.empty())
+        {
             co_await apiSet.sendGroupMsg(msg.group_id, message);
         }
         co_return;
     });
 
-    twobot->onEvent<PrivateMsg>([&twobot](const PrivateMsg& msg) -> coro::task<> {
-        auto&& [_, dbPool, globalConfig] = *yobot::getInstance();
+    twobot->onEvent<PrivateMsg>([](const PrivateMsg& msg) -> coro::task<> {
+        auto&& [twobot, dbPool, globalConfig] = *yobot::getInstance();
         auto apiSet = twobot->getApiSet(msg.self_id);
-        auto db = dbPool->get();
+        std::string message = "";
         if (msg.raw_message == "version")
         {
-            co_await apiSet.sendPrivateMsg(msg.user_id, versionInfo);
+            message = versionInfo;
         }
         if (msg.raw_message == "你好")
         {
-            co_await apiSet.sendPrivateMsg(msg.user_id, "你好，我是yobotpp！");
+            message = "你好，我是yobotpp！";
         }
         if (msg.raw_message == "统计")
         {
-            using sqlpp::select;
-            using sqlpp::count;
-            using sqlpp::distinct;
-            yobot::data::User user = {};
-            std::size_t userCount = db(
-                select(count(user.qqid))
-                .from(user)
-                .unconditionally()
-            ).begin()->count;
-            std::size_t groupCount = db(
-                select(count(distinct, user.clanGroupId))
-                .from(user)
-                .unconditionally()
-            ).begin()->count;
-            auto message = std::format("用户总数：{}\n群组总数：{}", userCount, groupCount);
-            co_await apiSet.sendPrivateMsg(msg.user_id, message);
+            message = yobot::statistics(dbPool);
         }
         if (msg.raw_message == "更新数据")
         {
             yobot::updateBossData(globalConfig);
-            co_await apiSet.sendPrivateMsg(msg.user_id, "更新成功");
+            message = "更新成功";
+        }
+        if (!message.empty())
+        {
+            co_await apiSet.sendPrivateMsg(msg.user_id, message);
         }
         co_return;
     });
 
-    twobot->onEvent<ConnectEvent>([&twobot](const ConnectEvent& msg) -> coro::task<> {
+    twobot->onEvent<ConnectEvent>([](const ConnectEvent& msg) -> coro::task<> {
         std::cout << "yobotpp已连接！ID: " << msg.self_id << std::endl;
         co_return;
     });
