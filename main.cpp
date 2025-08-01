@@ -12,10 +12,9 @@
 #include "default_config.h"
 #include "yobotdata_new.sql.h"
 
-#define CONNECT_LITERAL(X,Y) X##Y
-
-using namespace nlohmann::json_literals;
-using namespace twobot::Event;
+using twobot::Event::GroupMsg;
+using twobot::Event::PrivateMsg;
+using twobot::Event::ConnectEvent;
 using nlohmann::json;
 using nlohmann::ordered_json;
 
@@ -29,11 +28,11 @@ constexpr auto IconDir = "icon";
 namespace yobot {
     using DB_Pool = sqlpp::sqlite3::connection_pool;
     using DB_Config = sqlpp::sqlite3::connection_config;
-    using Message = std::variant<twobot::Event::GroupMsg, twobot::Event::PrivateMsg>;
+    using Message = std::variant<GroupMsg, PrivateMsg>;
     using Action = std::function<std::string(const Message&)>;
-    using MessageAction = std::tuple<std::regex, Action>;
-    using MessgaeActionVector = std::vector<MessageAction>;
-    using Instance = std::tuple<std::unique_ptr<twobot::BotInstance>, std::shared_ptr<DB_Pool>, ordered_json, MessgaeActionVector>;
+    using RegexAction = std::pair<std::regex, Action>;
+    using RegexActionVector = std::vector<RegexAction>;
+    using Instance = std::tuple<std::unique_ptr<twobot::BotInstance>, std::shared_ptr<DB_Pool>, ordered_json, RegexActionVector>;
     using BoosData = std::tuple<std::string_view, json::array_t, json::array_t, json::array_t, json::array_t>;
 
     static Instance& getInstance();
@@ -63,90 +62,6 @@ namespace yobot {
         }
     }
 
-    class Group
-    {
-    public:
-        Group(const std::shared_ptr<DB_Pool>& pool, std::uint64_t groupID) noexcept
-            : m_pool(pool)
-            , m_groupID(groupID)
-            , m_clanGroup()
-        {
-
-        }
-        ~Group() = default;
-        Group(const Group&) = delete;
-        Group(Group&) = delete;
-        Group(Group&&) = default;
-
-    public:
-        using status = std::tuple<std::int64_t, std::string, json, json, json, json>;
-        std::optional<status> getStatus()
-        {
-            std::optional<status> ret = std::nullopt;
-            auto db = m_pool->get();
-            auto raws = db(
-                select(all_of(m_clanGroup))
-                .from(m_clanGroup)
-                .where(m_clanGroup.groupId == m_groupID)
-            );
-            for (const auto& raw : raws)
-            {
-                if (raw.deleted)
-                {
-                    break;
-                }
-                ret = std::make_optional<status>(
-                    raw.bossCycle.value(),
-                    raw.gameServer.value(),
-                    json::parse(raw.challengingMemberList.value(), nullptr, false),
-                    json::parse(raw.subscribeList.value(), nullptr, false),
-                    json::parse(raw.nowCycleBossHealth.value()),
-                    json::parse(raw.nextCycleBossHealth.value())
-                );
-            }
-            return ret;
-        }
-
-        bool setStatus(const std::int64_t& lap, const json& thisLapBossHealth, const json& nextLapBossHealth)
-        {
-            bool ret = false;
-            auto db = m_pool->get();
-            if (isStatusLegal(lap, thisLapBossHealth, nextLapBossHealth))
-            {
-                db(
-                    update(m_clanGroup)
-                    .set(
-                        m_clanGroup.challengingMemberList = sqlpp::null,
-                        m_clanGroup.subscribeList = sqlpp::null,
-                        m_clanGroup.bossCycle = lap,
-                        m_clanGroup.nowCycleBossHealth = thisLapBossHealth.dump(),
-                        m_clanGroup.nextCycleBossHealth = nextLapBossHealth.dump()
-                    )
-                    .where(m_clanGroup.groupId == m_groupID)
-                );
-                ret = true;
-            }
-            return ret;
-        }
-
-    private:
-        void updateStatusInternal()
-        {
-
-        }
-
-        bool isStatusLegal(const std::int64_t& bossCycle, const json& nowCycleBossHealth, const json& nextCycleBossHealth)
-        {
-
-            return false;
-        }
-
-    private:
-        std::shared_ptr<DB_Pool> m_pool;
-        std::uint64_t m_groupID;
-        data::ClanGroup m_clanGroup;
-    };
-
     static auto InitConfig() noexcept
     {
 #ifdef _WIN32
@@ -165,7 +80,7 @@ namespace yobot {
         auto globalConfig = ordered_json::parse(std::ifstream(ConfigName));
         auto accessToken = globalConfig["access_token"].get<std::string>();
         twobot::Config botConfig = {
-            .host = "127.0.0.1",
+            .host = "10.9.0.1",
             .api_port = 5700,
             .ws_port = globalConfig["port"],
             .token = (accessToken.empty() ? std::nullopt : std::make_optional(accessToken))
@@ -192,9 +107,23 @@ namespace yobot {
     }
 
     namespace system {
-        auto showVersion()
+        inline bool isSuperAdmin(uint64_t userId)
         {
-            return MessageAction{
+            auto& globalConfig = std::get<2>(getInstance());
+            auto& a = globalConfig["super-admin"].get_ref<const ordered_json::array_t&>();
+            return std::find(a.begin(), a.end(), userId) != a.end();
+        }
+
+        inline bool isSuperAdmin(const Message& msg)
+        {
+            return std::visit([](auto&& x) {
+                return isSuperAdmin(x.user_id); 
+            }, msg);
+        }
+
+        inline auto showVersion()
+        {
+            return RegexAction{
                 "version",
                 [](const Message& msg) {
                     return VersionInfo;
@@ -202,35 +131,182 @@ namespace yobot {
             };
         }
 
-        auto showStatistics()
+        inline auto showStatistics()
         {
-            return MessageAction{
+            return RegexAction{
                 "统计",
-                [](const Message& msg) {
-                    auto& dbPool = std::get<1>(getInstance());
-                    return statistics(dbPool);
+                [](const Message& msg) -> std::string {
+                    if (isSuperAdmin(msg))
+                    {
+                        auto& dbPool = std::get<1>(getInstance());
+                        return statistics(dbPool);
+                    }
+                    return "权限错误";
                 }
             };
         }
 
-        auto updateData()
+        inline auto updateData()
         {
-            return MessageAction{
+            return RegexAction{
                 "更新数据",
                 [](const Message& msg) {
-                    bool ret = std::visit([](auto&& x) {
-                        static std::mutex mtUpdate;
-                        std::lock_guard(mtUpdate);
-                        ordered_json& globalConfig = std::get<2>(getInstance());
-                        auto &a = globalConfig["super-admin"].get_ref<ordered_json::array_t&>();
-                        if (std::find(a.begin(), a.end(), x.user_id) != a.end())
+                    static std::mutex mtUpdate;
+					if (isSuperAdmin(msg))
+                    {
+                        std::lock_guard lock(mtUpdate);
+                        auto& globalConfig = std::get<2>(getInstance());
+                        updateBossData(globalConfig);
+                        return "更新成功";
+                    }
+                    return "权限错误";
+                }
+            };
+        }
+    }
+
+    namespace clanbattle {
+        class Group
+        {
+        public:
+            Group(const std::shared_ptr<DB_Pool>& pool, std::uint64_t groupID) noexcept
+                : m_pool(pool)
+                , m_groupID(groupID)
+                , m_clanGroup()
+            {
+
+            }
+            ~Group() = default;
+            Group(const Group&) = delete;
+            Group(Group&) = delete;
+            Group(Group&&) = default;
+
+        public:
+            using status = std::tuple<std::int64_t, std::string, json, json, json, json>;
+            std::optional<status> getStatus()
+            {
+                std::optional<status> ret = std::nullopt;
+                auto db = m_pool->get();
+                auto raws = db(
+                    select(all_of(m_clanGroup))
+                    .from(m_clanGroup)
+                    .where(m_clanGroup.groupId == m_groupID)
+                );
+                for (const auto& raw : raws)
+                {
+                    if (raw.deleted)
+                    {
+                        break;
+                    }
+                    ret = std::make_optional<status>(
+                        raw.bossCycle.value(),
+                        raw.gameServer.value(),
+                        json::parse(raw.challengingMemberList.value(), nullptr, false),
+                        json::parse(raw.subscribeList.value(), nullptr, false),
+                        json::parse(raw.nowCycleBossHealth.value()),
+                        json::parse(raw.nextCycleBossHealth.value())
+                    );
+                }
+                return ret;
+            }
+
+            bool setStatus(const std::int64_t& lap, const json& thisLapBossHealth, const json& nextLapBossHealth)
+            {
+                bool ret = false;
+                auto db = m_pool->get();
+                if (isStatusLegal(lap, thisLapBossHealth, nextLapBossHealth))
+                {
+                    db(
+                        update(m_clanGroup)
+                        .set(
+                            m_clanGroup.challengingMemberList = sqlpp::null,
+                            m_clanGroup.subscribeList = sqlpp::null,
+                            m_clanGroup.bossCycle = lap,
+                            m_clanGroup.nowCycleBossHealth = thisLapBossHealth.dump(),
+                            m_clanGroup.nextCycleBossHealth = nextLapBossHealth.dump()
+                        )
+                        .where(m_clanGroup.groupId == m_groupID)
+                    );
+                    ret = true;
+                }
+                return ret;
+            }
+
+        private:
+            void updateStatusInternal()
+            {
+
+            }
+
+            bool isStatusLegal(const std::int64_t& bossCycle, const json& nowCycleBossHealth, const json& nextCycleBossHealth)
+            {
+
+                return false;
+            }
+
+        private:
+            std::shared_ptr<DB_Pool> m_pool;
+            std::uint64_t m_groupID;
+            data::ClanGroup m_clanGroup;
+        };
+
+        inline std::int8_t getPhase(const std::int64_t lap, const std::string& gameServer, const ordered_json& globalConfig)
+        {
+            char ret = 0;
+            auto& phaseList = globalConfig["lap_range"][gameServer].get_ref<const ordered_json::array_t&>();
+            for (auto&& range : phaseList)
+            {
+                if (lap >= range[0] && lap <= range[1])
+                {
+                    break;
+                }
+                ret++;
+            }
+            return ret;
+        }
+
+        std::string renderStatusText(Group::status& status, const ordered_json& globalConfig)
+        {
+            std::cout << status << std::endl;
+            const auto&& [lap, gameServer, subList, chalList, thisHPList, nextHPList] = std::move(status);
+            auto phase = getPhase(lap, gameServer, globalConfig);
+            std::string message = std::format("现在是{}阶段，第{}周目：", (char)(phase + 'A'), lap);
+            auto& lapHPList = globalConfig["boss_hp"][gameServer][phase].get_ref<const ordered_json::array_t&>();
+            for (size_t i = 1; i <= 5; i++)
+            {
+                auto strI = std::to_string(i);
+                bool chanllenging = !chalList.is_discarded() && !chalList[strI].is_null();
+                auto& HPList = (thisHPList[strI] == 0 ? nextHPList : thisHPList);
+                auto HP = HPList[strI].get<std::int64_t>();
+                auto fullHP = lapHPList[i - 1].get<std::int64_t>();
+                std::int64_t rate = HP * 10 / fullHP + (HP == 0);
+                auto chalStr = (chanllenging ? "有" : "无");
+                message += std::format("\n{}.【{:■<{}}{:□<{}}】{}人", i, "", rate, "", 10 - rate, chalStr);
+            }
+            return message;
+        }
+
+        inline auto showProgress()
+        {
+            return RegexAction{
+                "进度",
+                [](const Message& msg) {
+					return std::visit([&](auto&& x) -> std::string {
+                        if constexpr (std::is_convertible_v<decltype(x),GroupMsg>)
                         {
-                            updateBossData(globalConfig);
-                            return true;
+                            auto groupId = std::get_if<GroupMsg>(&msg)->group_id;
+                            auto& dbPool = std::get<1>(getInstance());
+                            auto& globalConfig = std::get<2>(getInstance());
+                            auto group = Group(dbPool, groupId);
+                            auto status = group.getStatus();
+                            if (status)
+                            {
+                            	return renderStatusText(*status, globalConfig);
+                            }
+                            return "未检测到数据，请先创建公会！";
                         }
-                        return false;
+                        return "";
                     }, msg);
-                    return "更新成功";
                 }
             };
         }
@@ -240,55 +316,21 @@ namespace yobot {
     {
         auto&& [botConfig, dbConfig, globalConfig] = InitConfig();
         auto dbPool = InitDatabase(dbConfig);
-        auto instance = twobot::BotInstance::createInstance(botConfig);
+        auto onebotIO = twobot::BotInstance::createInstance(botConfig);
         std::filesystem::create_directory(IconDir);
-        MessgaeActionVector messageActionVec = {
+        RegexActionVector regexActionVec = {
             system::showVersion(),
-            system::showStatistics()
+            system::showStatistics(),
+            system::updateData(),
+            clanbattle::showProgress()
         };
-        return std::make_tuple(std::move(instance), dbPool, globalConfig, std::move(messageActionVec));
+        return std::make_tuple(std::move(onebotIO), dbPool, globalConfig, std::move(regexActionVec));
     }
 
     static Instance& getInstance()
     {
         static auto g_instance = construct();
         return g_instance;
-    }
-
-    inline std::int8_t getPhase(const std::int64_t lap, const std::string& gameServer, const ordered_json& globalConfig)
-    {
-        char ret = 0;
-        auto& phaseList = globalConfig["lap_range"][gameServer].get_ref<const ordered_json::array_t&>();
-        for (auto&& range : phaseList)
-        {
-            if (lap >= range[0] && lap <= range[1])
-            {
-                break;
-            }
-            ret++;
-        }
-        return ret;
-    }
-
-    std::string renderStatusText(Group::status& status, const ordered_json& globalConfig)
-    {
-        std::cout << status << std::endl;
-        const auto&& [lap, gameServer, subList, chalList, thisHPList, nextHPList] = std::move(status);
-        auto phase = getPhase(lap, gameServer, globalConfig);
-        std::string message = std::format("现在是{}阶段，第{}周目：", (char)(phase + 'A'), lap);
-        auto& lapHPList = globalConfig["boss_hp"][gameServer][phase].get_ref<const ordered_json::array_t&>();
-        for (size_t i = 1; i <= 5; i++)
-        {
-            auto strI = std::to_string(i);
-            bool chanllenging = !chalList.is_discarded() && !chalList[strI].is_null();
-            auto& HPList = (thisHPList[strI] == 0 ? nextHPList : thisHPList);
-            auto HP = HPList[strI].get<std::int64_t>();
-            auto fullHP = lapHPList[i - 1].get<std::int64_t>();
-			std::int64_t rate = HP * 10 / fullHP + (HP == 0);
-            auto chalStr = (chanllenging ? "有" : "无");
-            message += std::format("\n{}.【{:■<{}}{:□<{}}】{}人", i, "", rate, "", 10 - rate, chalStr);
-        }
-        return message;
     }
 
     inline void fetchBossData(BoosData& bossData, tbb::concurrent_unordered_set<json::number_integer_t>& idSet)
@@ -390,55 +432,58 @@ namespace yobot {
         ).begin()->count.value();
         return std::format("用户总数：{}\n群组总数：{}", userCount, groupCount);
     }
+
+    inline std::string parallelForEachAction(const Message& msg)
+    {
+        auto& regexActionVec = std::get<3>(yobot::getInstance());
+        auto raw_message = std::visit([](auto&& x) { return x.raw_message; }, msg);
+        std::string message;
+        tbb::parallel_for(0ULL, regexActionVec.size(), [&](std::size_t it) {
+            auto&& [regex, action] = regexActionVec[it];
+            if (std::regex_match(raw_message, regex))
+            {
+                message = action(msg);
+            }
+        });
+        return message;
+    }
+
+	//coro::task<> processMessageAysnc(std::string message, Message msg)
+ //   {
+ //       if (!message.empty())
+ //       {
+ //           return std::visit([](auto&& x) -> coro::task<> {
+ //               auto& onebotIO = std::get<0>(yobot::getInstance());
+ //               auto apiSet = onebotIO->getApiSet(x.self_id);
+ //               if constexpr (std::is_convertible_v<decltype(x), GroupMsg>)
+ //               {
+ //                   co_await apiSet.sendGroupMsg(std::get_if<GroupMsg>(&x)->group_id, message);
+ //               }
+ //               if constexpr (std::is_convertible_v<decltype(msg), PrivateMsg>)
+ //               {
+ //                   co_await apiSet.sendPrivateMsg(std::get_if<PrivateMsg>(&x)->user_id, message);
+ //               }
+ //               co_return;
+ //           }, msg);
+ //       }
+ //       return []() -> coro::task<> {co_return; }();
+ //   }
 }
 
 int main(int argc, char** args)
 {
 	static volatile int MI_VERSION = mi_version();
-	auto&& [twobot, dbPool, globalConfig, messageActionVec] = yobot::getInstance();
+	auto&& [onebotIO, dbPool, globalConfig, regexActionVec] = yobot::getInstance();
 
-    twobot->onEvent<GroupMsg>([](const GroupMsg& msg) -> coro::task<> {
-        auto&& [twobot, dbPool, globalConfig, messageActionVec] = yobot::getInstance();
-        auto apiSet = twobot->getApiSet(msg.self_id);
-        std::string message = "";
-        if (msg.raw_message == "version")
-        {
-            message = VersionInfo;
-        }
-        if (msg.raw_message == "进度")
-        {
-            auto group = yobot::Group(dbPool, msg.group_id);
-            auto status = group.getStatus();
-            message = "未检测到数据，请先创建公会！";
-            if (status)
-            {
-                message = yobot::renderStatusText(*status, globalConfig);
-            }
-        }
-        if (!message.empty())
-        {
-            co_await apiSet.sendGroupMsg(msg.group_id, message);
-        }
-        co_return;
+    onebotIO->onEvent<GroupMsg>([](const GroupMsg& msg) -> coro::task<> {
+        co_return;// co_await yobot::processMessageAysnc(msg);
     });
 
-    twobot->onEvent<PrivateMsg>([](const PrivateMsg& msg) -> coro::task<> {
-        auto&& [twobot, dbPool, globalConfig, messageActionVec] = yobot::getInstance();
-        auto apiSet = twobot->getApiSet(msg.self_id);
-        std::string message = "";
-        if (msg.raw_message == "version")
-        {
-            message = VersionInfo;
-        }
-        if (msg.raw_message == "统计")
-        {
-            message = yobot::statistics(dbPool);
-        }
-        if (msg.raw_message == "更新数据")
-        {
-            yobot::updateBossData(globalConfig);
-            message = "更新成功";
-        }
+    onebotIO->onEvent<PrivateMsg>([](const PrivateMsg& msg) -> coro::task<> {
+        std::string message = yobot::parallelForEachAction(msg);
+        //co_await yobot::processMessageAysnc(message, msg);
+        auto& onebotIO = std::get<0>(yobot::getInstance());
+        auto apiSet = onebotIO->getApiSet(msg.self_id);
         if (!message.empty())
         {
             co_await apiSet.sendPrivateMsg(msg.user_id, message);
@@ -446,13 +491,13 @@ int main(int argc, char** args)
         co_return;
     });
 
-    twobot->onEvent<ConnectEvent>([](const ConnectEvent& msg) -> coro::task<> {
+    onebotIO->onEvent<ConnectEvent>([](const ConnectEvent& msg) -> coro::task<> {
         std::cout << "yobotpp已连接！ID: " << msg.self_id << std::endl;
         co_return;
     });
 
     std::cout << "Start listening:" << globalConfig["port"] << std::endl;
-    twobot->start();
+    onebotIO->start();
 
     return 0;
 }
