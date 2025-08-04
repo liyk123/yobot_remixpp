@@ -22,6 +22,7 @@ constexpr auto DB_Name = "yobotdata_new.db";
 constexpr auto ConfigName = "yobot_config.json";
 constexpr auto IconDir = "icon";
 constexpr auto AuthorityErrorRespone = "权限错误";
+constexpr auto Group404ErrorResponse = "未检测到数据，请先创建公会！";
 
 namespace yobot {
     using twobot::Event::GroupMsg;
@@ -170,8 +171,8 @@ namespace yobot {
         class Group
         {
         public:
-            Group(const std::shared_ptr<DB_Pool>& pool, std::uint64_t groupID) noexcept
-                : m_pool(pool)
+            Group(std::uint64_t groupID) noexcept
+                : m_pool(std::get<1>(getInstance()))
                 , m_groupID(groupID)
                 , m_clanGroup()
             {
@@ -211,26 +212,21 @@ namespace yobot {
                 return ret;
             }
 
-            bool setStatus(const std::int64_t& lap, const json& thisLapBossHealth, const json& nextLapBossHealth)
+            void setStatus(const std::int64_t& lap, const json& thisLapBossHealth, const json& nextLapBossHealth)
             {
                 bool ret = false;
-                auto db = m_pool->get();
-                if (isStatusLegal(lap, thisLapBossHealth, nextLapBossHealth))
-                {
-                    db(
-                        update(m_clanGroup)
-                        .set(
-                            m_clanGroup.challengingMemberList = sqlpp::null,
-                            m_clanGroup.subscribeList = sqlpp::null,
-                            m_clanGroup.bossCycle = lap,
-                            m_clanGroup.nowCycleBossHealth = thisLapBossHealth.dump(),
-                            m_clanGroup.nextCycleBossHealth = nextLapBossHealth.dump()
-                        )
-                        .where(m_clanGroup.groupId == m_groupID)
-                    );
-                    ret = true;
-                }
-                return ret;
+                auto db = m_pool->get(); 
+                db(
+                    update(m_clanGroup)
+                    .set(
+                        m_clanGroup.challengingMemberList = sqlpp::null,
+                        m_clanGroup.subscribeList = sqlpp::null,
+                        m_clanGroup.bossCycle = lap,
+                        m_clanGroup.nowCycleBossHealth = thisLapBossHealth.dump(),
+                        m_clanGroup.nextCycleBossHealth = nextLapBossHealth.dump()
+                    )
+                    .where(m_clanGroup.groupId == m_groupID)
+                );
             }
 
         private:
@@ -239,21 +235,16 @@ namespace yobot {
 
             }
 
-            bool isStatusLegal(const std::int64_t& bossCycle, const json& nowCycleBossHealth, const json& nextCycleBossHealth)
-            {
-
-                return false;
-            }
-
         private:
             std::shared_ptr<DB_Pool> m_pool;
             std::uint64_t m_groupID;
             data::ClanGroup m_clanGroup;
         };
 
-        inline std::int8_t getPhase(const std::int64_t lap, const std::string& gameServer, const ordered_json& globalConfig)
+        inline std::int8_t getPhase(const std::int64_t lap, const std::string& gameServer)
         {
             char ret = 0;
+            auto& globalConfig = std::get<2>(getInstance());
             auto& phaseList = globalConfig["lap_range"][gameServer].get_ref<const ordered_json::array_t&>();
             for (auto&& range : phaseList)
             {
@@ -266,11 +257,12 @@ namespace yobot {
             return ret;
         }
 
-        std::string renderStatusText(Group::status& status, const ordered_json& globalConfig)
+        std::string renderStatusText(Group::status& status)
         {
             std::cout << status << std::endl;
+            auto& globalConfig = std::get<2>(getInstance());
             const auto&& [lap, gameServer, subList, chalList, thisHPList, nextHPList] = std::move(status);
-            auto phase = getPhase(lap, gameServer, globalConfig);
+            auto phase = getPhase(lap, gameServer);
             std::string message = std::format("现在是{}阶段，第{}周目：", (char)(phase + 'A'), lap);
             auto& lapHPList = globalConfig["boss_hp"][gameServer][phase].get_ref<const ordered_json::array_t&>();
             for (size_t i = 1; i <= 5; i++)
@@ -295,16 +287,32 @@ namespace yobot {
 					return std::visit([](auto&& x) -> std::string {
                         if constexpr (std::is_convertible_v<decltype(x),GroupMsg>)
                         {
-                            auto groupId = x.group_id;
-                            auto& dbPool = std::get<1>(getInstance());
-                            auto& globalConfig = std::get<2>(getInstance());
-                            auto group = Group(dbPool, groupId);
-                            auto status = group.getStatus();
-                            if (status)
+                            if (auto status = Group(x.group_id).getStatus())
                             {
-                            	return renderStatusText(*status, globalConfig);
+                            	return renderStatusText(*status);
                             }
-                            return "未检测到数据，请先创建公会！";
+                            return Group404ErrorResponse;
+                        }
+                        return "";
+                    }, msg);
+                }
+            };
+        }
+
+        inline auto setProgress()
+        {
+            return RegexAction{
+                "^(设置|调整|修改|变更|更新|改变)(进度)",
+                [](const Message& msg) -> std::string {
+                    if (showProgress().second(msg) == Group404ErrorResponse)
+                    {
+                        return Group404ErrorResponse;
+                    }
+                    return std::visit([](auto&& x) -> std::string {
+                        if constexpr (std::is_convertible_v<decltype(x),GroupMsg>)
+                        {
+                            auto group = Group(x.group_id);
+                            return "进度已调整";
                         }
                         return "";
                     }, msg);
@@ -323,7 +331,8 @@ namespace yobot {
             system::showVersion(),
             system::showStatistics(),
             system::updateData(),
-            clanbattle::showProgress()
+            clanbattle::showProgress(),
+            clanbattle::setProgress()
         };
         return std::make_tuple(std::move(onebotIO), dbPool, globalConfig, std::move(regexActionVec));
     }
