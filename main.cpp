@@ -12,9 +12,6 @@
 #include "default_config.h"
 #include "yobotdata_new.sql.h"
 
-using twobot::Event::GroupMsg;
-using twobot::Event::PrivateMsg;
-using twobot::Event::ConnectEvent;
 using nlohmann::json;
 using nlohmann::ordered_json;
 
@@ -24,8 +21,12 @@ constexpr auto C_LocaleName = "C";
 constexpr auto DB_Name = "yobotdata_new.db";
 constexpr auto ConfigName = "yobot_config.json";
 constexpr auto IconDir = "icon";
+constexpr auto AuthorityErrorRespone = "权限错误";
 
 namespace yobot {
+    using twobot::Event::GroupMsg;
+    using twobot::Event::PrivateMsg;
+    using twobot::Event::ConnectEvent;
     using DB_Pool = sqlpp::sqlite3::connection_pool;
     using DB_Config = sqlpp::sqlite3::connection_config;
     using Message = std::variant<GroupMsg, PrivateMsg>;
@@ -141,7 +142,7 @@ namespace yobot {
                         auto& dbPool = std::get<1>(getInstance());
                         return statistics(dbPool);
                     }
-                    return "权限错误";
+                    return AuthorityErrorRespone;
                 }
             };
         }
@@ -159,7 +160,7 @@ namespace yobot {
                         updateBossData(globalConfig);
                         return "更新成功";
                     }
-                    return "权限错误";
+                    return AuthorityErrorRespone;
                 }
             };
         }
@@ -291,10 +292,10 @@ namespace yobot {
             return RegexAction{
                 "进度",
                 [](const Message& msg) {
-					return std::visit([&](auto&& x) -> std::string {
+					return std::visit([](auto&& x) -> std::string {
                         if constexpr (std::is_convertible_v<decltype(x),GroupMsg>)
                         {
-                            auto groupId = std::get_if<GroupMsg>(&msg)->group_id;
+                            auto groupId = x.group_id;
                             auto& dbPool = std::get<1>(getInstance());
                             auto& globalConfig = std::get<2>(getInstance());
                             auto group = Group(dbPool, groupId);
@@ -437,67 +438,74 @@ namespace yobot {
     {
         auto& regexActionVec = std::get<3>(yobot::getInstance());
         auto raw_message = std::visit([](auto&& x) { return x.raw_message; }, msg);
-        std::string message;
+        std::string response;
         tbb::parallel_for(0ULL, regexActionVec.size(), [&](std::size_t it) {
             auto&& [regex, action] = regexActionVec[it];
             if (std::regex_match(raw_message, regex))
             {
-                message = action(msg);
+                response = action(msg);
             }
         });
-        return message;
+        return response;
     }
 
-	//coro::task<> processMessageAysnc(std::string message, Message msg)
- //   {
- //       if (!message.empty())
- //       {
- //           return std::visit([](auto&& x) -> coro::task<> {
- //               auto& onebotIO = std::get<0>(yobot::getInstance());
- //               auto apiSet = onebotIO->getApiSet(x.self_id);
- //               if constexpr (std::is_convertible_v<decltype(x), GroupMsg>)
- //               {
- //                   co_await apiSet.sendGroupMsg(std::get_if<GroupMsg>(&x)->group_id, message);
- //               }
- //               if constexpr (std::is_convertible_v<decltype(msg), PrivateMsg>)
- //               {
- //                   co_await apiSet.sendPrivateMsg(std::get_if<PrivateMsg>(&x)->user_id, message);
- //               }
- //               co_return;
- //           }, msg);
- //       }
- //       return []() -> coro::task<> {co_return; }();
- //   }
+	coro::task<> processMessageAysnc(const Message& msg)
+    {
+        std::string response = yobot::parallelForEachAction(msg);
+        if (!response.empty())
+        {
+            return std::visit([&](auto&& x) -> coro::task<> {
+                auto& onebotIO = std::get<0>(yobot::getInstance());
+                auto apiSet = onebotIO->getApiSet(x.self_id);
+                if constexpr (std::is_convertible_v<decltype(x), GroupMsg>)
+                {
+                    return [](twobot::ApiSet apiSet, std::uint64_t groud_id, std::string message) -> coro::task<> {
+                        co_await apiSet.sendGroupMsg(groud_id, message);
+                        co_return;
+                    }(apiSet, x.group_id, response);
+                }
+                if constexpr (std::is_convertible_v<decltype(x), PrivateMsg>)
+                {
+                    return [](twobot::ApiSet apiSet, std::uint64_t user_id, std::string message) -> coro::task<> {
+                        co_await apiSet.sendPrivateMsg(user_id, message);
+                        co_return;
+                    }(apiSet, x.user_id, response);
+                }
+            }, msg);
+        }
+        return []() -> coro::task<> { co_return; }();
+    }
+
+    void initialize()
+    {
+        auto& onebotIO = std::get<0>(yobot::getInstance());
+        onebotIO->onEvent<GroupMsg>([](const GroupMsg& msg) -> coro::task<> {
+            co_return co_await processMessageAysnc(msg);
+        });
+
+        onebotIO->onEvent<PrivateMsg>([](const PrivateMsg& msg) -> coro::task<> {
+            co_return co_await processMessageAysnc(msg);
+        });
+
+        onebotIO->onEvent<ConnectEvent>([](const ConnectEvent& msg) -> coro::task<> {
+            std::cout << "websocket已连接！ID: " << msg.self_id << std::endl;
+            co_return;
+        });
+    }
+
+    void start()
+    {
+        auto& onebotIO = std::get<0>(getInstance());
+        auto& globalConfig = std::get<2>(getInstance());
+        std::cout << "Start listening:" << globalConfig["port"] << std::endl;
+        onebotIO->start();
+    }
 }
 
 int main(int argc, char** args)
 {
 	static volatile int MI_VERSION = mi_version();
-	auto&& [onebotIO, dbPool, globalConfig, regexActionVec] = yobot::getInstance();
-
-    onebotIO->onEvent<GroupMsg>([](const GroupMsg& msg) -> coro::task<> {
-        co_return;// co_await yobot::processMessageAysnc(msg);
-    });
-
-    onebotIO->onEvent<PrivateMsg>([](const PrivateMsg& msg) -> coro::task<> {
-        std::string message = yobot::parallelForEachAction(msg);
-        //co_await yobot::processMessageAysnc(message, msg);
-        auto& onebotIO = std::get<0>(yobot::getInstance());
-        auto apiSet = onebotIO->getApiSet(msg.self_id);
-        if (!message.empty())
-        {
-            co_await apiSet.sendPrivateMsg(msg.user_id, message);
-        }
-        co_return;
-    });
-
-    onebotIO->onEvent<ConnectEvent>([](const ConnectEvent& msg) -> coro::task<> {
-        std::cout << "yobotpp已连接！ID: " << msg.self_id << std::endl;
-        co_return;
-    });
-
-    std::cout << "Start listening:" << globalConfig["port"] << std::endl;
-    onebotIO->start();
-
+    yobot::initialize();
+    yobot::start();
     return 0;
 }
