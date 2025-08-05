@@ -376,6 +376,11 @@ namespace yobot {
                 }
                 return message;
             }
+
+            auto filterStatusInput(const std::string& message)
+            {
+
+            }
         }
 
         inline RegexAction showProgress()
@@ -399,7 +404,7 @@ namespace yobot {
 
         inline RegexAction setProgress()
         {
-            static const std::regex rgx("^(设置|调整|修改|变更|更新|改变)进度");
+            static const std::regex rgx(R"(^(设置|调整|修改|变更|更新|改变)进度.*)");
             static const Action act = [](const Message& msg) -> std::string {
                 if (showProgress().second(msg) == Group404ErrorResponse)
                 {
@@ -408,8 +413,15 @@ namespace yobot {
 				return std::visit([](auto&& x) -> std::string {
 					if constexpr (std::is_convertible_v<decltype(x), GroupMsg>)
 					{
-                        auto group = detail::Group(x.group_id);
-                        return "进度已调整";
+                        static const std::regex re(R"(.*\[.*\]$)");
+                        if (std::regex_match(x.raw_message, re))
+                        {
+                            auto subStr = x.raw_message.substr(x.raw_message.find_first_of("["));
+                            std::cout << subStr << std::endl;
+                            auto group = detail::Group(x.group_id);
+                            return "进度已调整";
+                        }
+                        return "格式错误";
                     }
                     return "";
                 }, msg);
