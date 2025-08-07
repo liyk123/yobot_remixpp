@@ -177,8 +177,10 @@ namespace yobot {
                 }
             }
 
-            void updateBossData(ordered_json& globalConfig)
+            void updateBossData()
             {
+                static std::mutex mtUpdate;
+                std::lock_guard lock(mtUpdate);
                 std::vector<yobot::BoosData> vBossData = {
                     {yobot::area::cn, {}, {}, {}, {}},
                     {yobot::area::tw, {}, {}, {}, {}},
@@ -187,10 +189,10 @@ namespace yobot {
                 tbb::concurrent_unordered_set<json::number_integer_t> idSet;
                 tbb::parallel_for(0ULL, vBossData.size(), [&](std::size_t it) {
                     fetchBossData(vBossData[it], idSet);
-                    });
+                });
                 tbb::parallel_for(idSet.range(), [](auto&& range) {
                     fetchBossIcon(range);
-                    });
+                });
                 ordered_json jbossData;
                 for (auto&& x : vBossData)
                 {
@@ -200,12 +202,14 @@ namespace yobot {
                     jbossData["boss_id"][a] = d;
                     jbossData["boss_name"][a] = e;
                 }
+                auto& globalConfig = std::get<2>(getInstance());
                 globalConfig.merge_patch(jbossData);
                 std::ofstream(ConfigName) << globalConfig.dump(4) << std::endl;
             }
 
-            std::string statistics(const std::shared_ptr<DB_Pool>& dbPool)
+            std::string statistics()
             {
+                auto& dbPool = std::get<1>(getInstance());
                 auto db = dbPool->get();
                 yobot::data::User user = {};
                 auto userCount = db(
@@ -238,8 +242,7 @@ namespace yobot {
             static const Action act = [](const Message& msg) -> std::string {
                 if (detail::isSuperAdmin(msg))
                 {
-                    auto& dbPool = std::get<1>(getInstance());
-                    return detail::statistics(dbPool);
+                    return detail::statistics();
                 }
                 return AuthorityErrorRespone;
             };
@@ -250,12 +253,9 @@ namespace yobot {
         {
             static const std::regex rgx("更新数据");
             static const Action act = [](const Message& msg) {
-                static std::mutex mtUpdate;
                 if (detail::isSuperAdmin(msg))
                 {
-                    std::lock_guard lock(mtUpdate);
-                    auto& globalConfig = std::get<2>(getInstance());
-                    detail::updateBossData(globalConfig);
+                    detail::updateBossData();
                     return "更新成功";
                 }
                 return AuthorityErrorRespone;
@@ -310,7 +310,7 @@ namespace yobot {
                     return ret;
                 }
 
-                void setStatus(const std::int64_t& lap, const json& thisLapBossHealth, const json& nextLapBossHealth)
+                void setStatus(const std::int64_t lap, const json& thisLapBossHealth, const json& nextLapBossHealth)
                 {
                     bool ret = false;
                     auto db = m_pool->get();
@@ -377,9 +377,51 @@ namespace yobot {
                 return message;
             }
 
-            auto filterStatusInput(const std::string& message)
+			bool checkAndFilterProgress(const std::string& gameServer, const int lap, const int unit, json::array_t& thisHPList, json::array_t& nextHPList)
             {
+                auto &globalConfig = std::get<2>(getInstance());
+                auto thisPhase = getPhase(lap, gameServer);
+                auto nextPhase = getPhase(lap + 1LL, gameServer);
+                for (int i = 0; i < 5; i++)
+                {
+                    auto& thisHP = thisHPList[i];
+                    auto& nextHP = nextHPList[i];
+                    if (thisHP > nextHP)
+                    {
+                        return false;
+                    }
+                    thisHP = thisHP * unit;
+                    nextHP = nextHP * unit;
+                }
+                return true;
+            }
 
+            bool setProgress(const GroupMsg& msg)
+            {
+                constexpr auto partenStr = R"(\[\s*(\d+),\s*([wWkK]|万|千),\s*(\[\s*\d+(?:,\s*\d+){4}\s*\]),\s*(\[\s*\d+(?:,\s*\d+){4}\s*\])\s*\]$)";
+                static const std::regex parten(partenStr);
+                std::smatch matches;
+                if (std::regex_search(msg.raw_message, matches, parten))
+                {
+                    int lap = std::atoi(matches[1].str().c_str());
+                    int unit = 10000;
+                    static const std::regex partenUnitK("[kK]|千");
+                    if (std::regex_match(matches[2].str(), partenUnitK))
+                    {
+                        unit = 1000;
+                    }
+                    json::array_t thisHPList = json::parse(matches[3].str());
+                    json::array_t nextHPList = json::parse(matches[4].str());
+                    auto group = detail::Group(msg.group_id);
+                    std::string gameServer = std::get<1>(*group.getStatus());
+					if (checkAndFilterProgress(gameServer, lap, unit, thisHPList, nextHPList))
+                    {
+                        group.setStatus(lap, thisHPList, nextHPList);
+                        std::cout << lap << " " << thisHPList << " " << nextHPList << std::endl;
+                        return true;
+                    }
+                }
+                return false;
             }
         }
 
@@ -412,16 +454,10 @@ namespace yobot {
 				}
 				return std::visit([](auto&& x) -> std::string {
 					if constexpr (std::is_convertible_v<decltype(x), GroupMsg>)
-					{
-                        static const std::regex re(R"(.*\[.*\]$)");
-                        if (std::regex_match(x.raw_message, re))
-                        {
-                            auto subStr = x.raw_message.substr(x.raw_message.find_first_of("["));
-                            std::cout << subStr << std::endl;
-                            auto group = detail::Group(x.group_id);
-                            return "进度已调整";
-                        }
-                        return "格式错误";
+                    {
+                        return detail::setProgress(x) 
+                            ? "进度已修改：\n" + showProgress().second(x) 
+                            : "格式错误";
                     }
                     return "";
                 }, msg);
@@ -520,10 +556,30 @@ namespace yobot {
     }
 }
 
+void test()
+{
+    try {
+        const std::regex re(R"(\[\s*(\d+),\s*([wWkK]|万|千),\s*(\[\s*\d+(?:,\s*\d+){4}\s*\]),\s*(\[\s*\d+(?:,\s*\d+){4}\s*\])\s*\]$)");
+        std::smatch matches;
+        std::string str = "[30,万,[2000,2000,3000,4000,50000],[1,5,3,4,5]]";
+        if (std::regex_search(str, matches, re))
+        {
+            for (auto&& x : matches)
+            {
+                std::cout << x.str() << std::endl;
+            }
+        }
+    }
+    catch (std::exception e) {
+        std::cout << e.what() << std::endl;
+    }
+}
+
 int main(int argc, char** args)
 {
 	static volatile int MI_VERSION = mi_version();
     yobot::initialize();
     yobot::start();
+    //test();
     return 0;
 }
