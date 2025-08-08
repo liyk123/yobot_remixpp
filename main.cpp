@@ -377,23 +377,114 @@ namespace yobot {
                 return message;
             }
 
-			bool checkAndFilterProgress(const std::string& gameServer, const int lap, const int unit, json::array_t& thisHPList, json::array_t& nextHPList)
+            inline std::string showProgess(const GroupMsg& msg)
             {
-                auto &globalConfig = std::get<2>(getInstance());
-                auto thisPhase = getPhase(lap, gameServer);
-                auto nextPhase = getPhase(lap + 1LL, gameServer);
+                if (auto status = Group(msg.group_id).getStatus())
+                {
+                    return toText(*status);
+                }
+                return Group404ErrorResponse;
+            }
+
+            bool isHPListLegal(json::array_t& thisHPList, json::array_t& nextHPList, bool isOverlap)
+            {
+                int singleZeroCount = 0;
+                int doubleZeroCount = 0;
                 for (int i = 0; i < 5; i++)
                 {
                     auto& thisHP = thisHPList[i];
                     auto& nextHP = nextHPList[i];
-                    if (thisHP > nextHP)
+                    if (!isOverlap)
                     {
-                        return false;
+                        if (thisHP == 0)
+                        {
+                            singleZeroCount++;
+                            doubleZeroCount += (int)(thisHP == nextHP);
+                        }
                     }
-                    thisHP = thisHP * unit;
-                    nextHP = nextHP * unit;
+                    else
+                    {
+                        if (thisHP == 0)
+                        {
+                            doubleZeroCount++;
+                        }
+                    }
                 }
+                return singleZeroCount == 5 || doubleZeroCount == 5;
+            }
+
+            inline void filterHP(json& hp, const int unit, const std::int64_t fullHP)
+            {
+                hp = hp * unit;
+                if (hp > fullHP)
+                {
+                    hp = fullHP;
+                }
+            }
+
+            void filterHPList(json::array_t& thisHPList, json::array_t& nextHPList, const ordered_json::array_t& lapHPList, const bool isOverlap, const int unit)
+            {
+                for (int i = 0; i < 5; i++)
+                {
+                    auto& thisHP = thisHPList[i];
+                    auto& nextHP = nextHPList[i];
+                    auto fullHP = lapHPList[i].get<std::int64_t>();
+                    if (!isOverlap)
+                    {
+                        if (thisHP != 0)
+                        {
+                            nextHP = fullHP;
+                            filterHP(thisHP, unit, fullHP);
+                        }
+                        else
+                        {
+                            filterHP(nextHP, unit, fullHP);
+                        }
+                    }
+                    else
+                    {
+                        if (thisHP != 0)
+                        {
+                            filterHP(thisHP, unit, fullHP);
+                        }
+                        nextHP = 0;
+                    }
+                }
+            }
+
+            bool checkAndFilterProgress(const std::string& gameServer, const int lap, const int unit, json::array_t& thisHPList, json::array_t& nextHPList)
+            {
+                if (lap < 1 || lap > 999)
+                {
+                    return false;
+                }
+
+                auto &globalConfig = std::get<2>(getInstance());
+                auto thisPhase = getPhase(lap, gameServer);
+                auto nextPhase = getPhase(lap + 1LL, gameServer);
+                auto& lapHPList = globalConfig["boss_hp"][gameServer][thisPhase].get_ref<const ordered_json::array_t&>();
+                bool isOverlap = (thisPhase != nextPhase);
+
+                if (isHPListLegal(thisHPList, nextHPList, isOverlap))
+                {
+                    return false;
+                }
+                    
+                filterHPList(thisHPList, nextHPList, lapHPList, isOverlap, unit);
+
                 return true;
+            }
+            
+            template<std::ranges::range T>
+            inline json adaptHPList(const T& list)
+            {
+				json ret = {};
+				for (int i = 0; i < 5; i++)
+				{
+					auto strI = std::to_string(i + 1);
+					ret[strI] = list[i];
+				}
+				return ret;
             }
 
             bool setProgress(const GroupMsg& msg)
@@ -401,27 +492,45 @@ namespace yobot {
                 constexpr auto partenStr = R"(\[\s*(\d+),\s*([wWkK]|万|千),\s*(\[\s*\d+(?:,\s*\d+){4}\s*\]),\s*(\[\s*\d+(?:,\s*\d+){4}\s*\])\s*\]$)";
                 static const std::regex parten(partenStr);
                 std::smatch matches;
-                if (std::regex_search(msg.raw_message, matches, parten))
+                try
                 {
-                    int lap = std::atoi(matches[1].str().c_str());
-                    int unit = 10000;
-                    static const std::regex partenUnitK("[kK]|千");
-                    if (std::regex_match(matches[2].str(), partenUnitK))
+                    if (std::regex_search(msg.raw_message, matches, parten))
                     {
-                        unit = 1000;
-                    }
-                    json::array_t thisHPList = json::parse(matches[3].str());
-                    json::array_t nextHPList = json::parse(matches[4].str());
-                    auto group = detail::Group(msg.group_id);
-                    std::string gameServer = std::get<1>(*group.getStatus());
-					if (checkAndFilterProgress(gameServer, lap, unit, thisHPList, nextHPList))
-                    {
-                        group.setStatus(lap, thisHPList, nextHPList);
-                        std::cout << lap << " " << thisHPList << " " << nextHPList << std::endl;
-                        return true;
+                        int lap = std::atoi(matches[1].str().c_str());
+                        int unit = 10000;
+                        static const std::regex partenUnitK("[kK]|千");
+                        if (std::regex_match(matches[2].str(), partenUnitK))
+                        {
+                            unit = 1000;
+                        }
+                        json::array_t thisHPList = json::parse(matches[3].str());
+                        json::array_t nextHPList = json::parse(matches[4].str());
+                        auto group = detail::Group(msg.group_id);
+                        std::string gameServer = std::get<1>(*group.getStatus());
+                        if (checkAndFilterProgress(gameServer, lap, unit, thisHPList, nextHPList))
+                        {
+                            group.setStatus(lap, adaptHPList(thisHPList), adaptHPList(nextHPList));
+                            std::cout << lap << " " << thisHPList << " " << nextHPList << std::endl;
+                            return true;
+                        }
                     }
                 }
+                catch (std::exception e)
+                {
+                    std::cerr << e.what() << '\n';
+				}
                 return false;
+            }
+
+            void resetProgess(const GroupMsg& msg)
+            {
+                auto group = detail::Group(msg.group_id);
+                std::string gameServer = std::get<1>(*group.getStatus());
+                auto& globalConfig = std::get<2>(getInstance());
+                auto phase = getPhase(1, gameServer);
+                auto& lapHPList = globalConfig["boss_hp"][gameServer][1].get_ref<const ordered_json::array_t&>();
+                auto HPList = adaptHPList(lapHPList);
+                group.setStatus(1, HPList, HPList);
             }
         }
 
@@ -432,11 +541,7 @@ namespace yobot {
                 return std::visit([](auto&& x) -> std::string {
                     if constexpr (std::is_convertible_v<decltype(x), GroupMsg>)
                     {
-                        if (auto status = detail::Group(x.group_id).getStatus())
-						{
-                            return detail::toText(*status);
-                        }
-                        return Group404ErrorResponse;
+                        return detail::showProgess(x);
                     }
                     return "";
                 }, msg);
@@ -448,16 +553,31 @@ namespace yobot {
         {
             static const std::regex rgx(R"(^(设置|调整|修改|变更|更新|改变)进度.*)");
             static const Action act = [](const Message& msg) -> std::string {
-                if (showProgress().second(msg) == Group404ErrorResponse)
-                {
-                    return Group404ErrorResponse;
-				}
 				return std::visit([](auto&& x) -> std::string {
 					if constexpr (std::is_convertible_v<decltype(x), GroupMsg>)
                     {
-                        return detail::setProgress(x) 
-                            ? "进度已修改：\n" + showProgress().second(x) 
-                            : "格式错误";
+                        return detail::showProgess(x) == Group404ErrorResponse 
+                            ? Group404ErrorResponse 
+                            : detail::setProgress(x) 
+                                ? "进度已修改：\n" + detail::showProgess(x) 
+                                : "格式错误";
+                    }
+                    return "";
+                }, msg);
+            };
+            return { rgx,act };
+        }
+
+        inline RegexAction resetProgress()
+        {
+            static const std::regex rgx("重置进度");
+            static const Action act = [](const Message& msg) -> std::string {
+                return std::visit([](auto&& x) -> std::string {
+                    if constexpr (std::is_convertible_v<decltype(x), GroupMsg>)
+                    {
+                        return detail::showProgess(x) == Group404ErrorResponse
+                            ? Group404ErrorResponse
+                            : (detail::resetProgess(x), "进度已修改：\n" + detail::showProgess(x));
                     }
                     return "";
                 }, msg);
