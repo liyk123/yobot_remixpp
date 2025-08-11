@@ -312,7 +312,6 @@ namespace yobot {
 
                 void setStatus(const std::int64_t lap, const json& thisLapBossHealth, const json& nextLapBossHealth)
                 {
-                    bool ret = false;
                     auto db = m_pool->get();
                     db(
                         update(m_clanGroup)
@@ -325,6 +324,30 @@ namespace yobot {
                         )
                         .where(m_clanGroup.groupId == m_groupID)
                     );
+                }
+
+                void insertChallenge(int bossNum, std::uint64_t userId, std::uint64_t behalfId)
+                {
+                    auto db = m_pool->get();
+                    auto raw = db(
+                        select(m_clanGroup.challengingMemberList)
+                        .from(m_clanGroup)
+                        .where(m_clanGroup.groupId == m_groupID)
+                    );
+                    auto list = raw.empty() ? json{} : json::parse(raw.begin()->challengingMemberList.value());
+                    list[std::to_string(bossNum)][std::to_string(userId)] = {
+                        {"is_continue", false},
+                        {"behalf", behalfId},
+                        {"s", 0},
+                        {"damage",0},
+                        {"tree", false},
+                        {"msg", ""}
+                    };
+                }
+
+                void insertDamege(int bossNum, std::int64_t damege, std::uint64_t userId, std::uint64_t behalfId)
+                {
+                    
                 }
 
             private:
@@ -512,7 +535,6 @@ namespace yobot {
                         if (checkAndFilterProgress(gameServer, lap, unit, thisHPList, nextHPList))
                         {
                             group.setStatus(lap, adaptHPList(thisHPList), adaptHPList(nextHPList));
-                            std::cout << lap << " " << thisHPList << " " << nextHPList << std::endl;
                             return true;
                         }
                     }
