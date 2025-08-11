@@ -119,7 +119,7 @@ namespace yobot {
             {
                 return std::visit([](auto&& x) {
                     return isSuperAdmin(x.user_id);
-                    }, msg);
+                }, msg);
             }
 
             inline void fetchBossData(BoosData& bossData, tbb::concurrent_unordered_set<json::number_integer_t>& idSet)
@@ -197,7 +197,7 @@ namespace yobot {
                 for (auto&& x : vBossData)
                 {
                     auto& [a, b, c, d, e] = x;
-                    jbossData["boss_HP"][a] = b;
+                    jbossData["boss_hp"][a] = b;
                     jbossData["lap_range"][a] = c;
                     jbossData["boss_id"][a] = d;
                     jbossData["boss_name"][a] = e;
@@ -370,16 +370,19 @@ namespace yobot {
                     auto& HPList = (thisHPList[strI] == 0 ? nextHPList : thisHPList);
                     auto HP = HPList[strI].get<std::int64_t>();
                     auto fullHP = lapHPList[i - 1].get<std::int64_t>();
-                    std::int64_t rate = HP * 10 / fullHP + (HP == 0);
+                    auto percent = HP * 100 / fullHP;
+                    percent = ((percent == 0) ? (HP != 0) : percent);
+                    auto rate = percent / 10;
+					rate = ((rate == 0) ? (HP != 0) : rate);
                     auto chalStr = (chanllenging ? "有" : "无");
-                    message += std::format("\n{}.【{:■<{}}{:□<{}}】{}人", i, "", rate, "", 10 - rate, chalStr);
+					message += std::format("\n{}. {:02}%【{:■<{}}{:□<{}}】{}人", i, percent, "", rate, "", 10 - rate, chalStr);
                 }
                 return message;
             }
 
-            inline std::string showProgess(const GroupMsg& msg)
+            inline std::string showProgess(const std::uint64_t groud_id)
             {
-                if (auto status = Group(msg.group_id).getStatus())
+                if (auto status = Group(groud_id).getStatus())
                 {
                     return toText(*status);
                 }
@@ -475,8 +478,7 @@ namespace yobot {
                 return true;
             }
             
-            template<std::ranges::range T>
-            inline json adaptHPList(const T& list)
+            inline json adaptHPList(const std::ranges::range auto& list)
             {
 				json ret = {};
 				for (int i = 0; i < 5; i++)
@@ -522,9 +524,9 @@ namespace yobot {
                 return false;
             }
 
-            void resetProgess(const GroupMsg& msg)
+            void resetProgess(const std::uint64_t group_id)
             {
-                auto group = detail::Group(msg.group_id);
+                auto group = detail::Group(group_id);
                 std::string gameServer = std::get<1>(*group.getStatus());
                 auto& globalConfig = std::get<2>(getInstance());
                 auto phase = getPhase(1, gameServer);
@@ -541,7 +543,7 @@ namespace yobot {
                 return std::visit([](auto&& x) -> std::string {
                     if constexpr (std::is_convertible_v<decltype(x), GroupMsg>)
                     {
-                        return detail::showProgess(x);
+                        return detail::showProgess(x.group_id);
                     }
                     return "";
                 }, msg);
@@ -556,10 +558,10 @@ namespace yobot {
 				return std::visit([](auto&& x) -> std::string {
 					if constexpr (std::is_convertible_v<decltype(x), GroupMsg>)
                     {
-                        return detail::showProgess(x) == Group404ErrorResponse 
+                        return !detail::Group(x.group_id).getStatus()
                             ? Group404ErrorResponse 
                             : detail::setProgress(x) 
-                                ? "进度已修改：\n" + detail::showProgess(x) 
+                                ? "进度已修改：\n" + detail::showProgess(x.group_id) 
                                 : "格式错误";
                     }
                     return "";
@@ -575,9 +577,9 @@ namespace yobot {
                 return std::visit([](auto&& x) -> std::string {
                     if constexpr (std::is_convertible_v<decltype(x), GroupMsg>)
                     {
-                        return detail::showProgess(x) == Group404ErrorResponse
+                        return !detail::Group(x.group_id).getStatus()
                             ? Group404ErrorResponse
-                            : (detail::resetProgess(x), "进度已修改：\n" + detail::showProgess(x));
+                            : (detail::resetProgess(x.group_id), "进度已重置：\n" + detail::showProgess(x.group_id));
                     }
                     return "";
                 }, msg);
@@ -597,7 +599,8 @@ namespace yobot {
             system::showStatistics(),
             system::updateData(),
             clanbattle::showProgress(),
-            clanbattle::setProgress()
+            clanbattle::setProgress(),
+            clanbattle::resetProgress()
         };
         return std::make_tuple(std::move(onebotIO), dbPool, globalConfig, std::move(regexActionVec));
     }
@@ -623,7 +626,7 @@ namespace yobot {
         return response;
     }
 
-	coro::task<> processMessageAysnc(const Message& msg)
+    coro::task<> processMessageAysnc(const Message& msg)
     {
         std::string response = yobot::parallelForEachAction(msg);
         if (!response.empty())
@@ -653,14 +656,8 @@ namespace yobot {
     void initialize()
     {
         auto& onebotIO = std::get<0>(yobot::getInstance());
-        onebotIO->onEvent<GroupMsg>([](const GroupMsg& msg) -> coro::task<> {
-            co_await processMessageAysnc(msg);
-        });
-
-        onebotIO->onEvent<PrivateMsg>([](const PrivateMsg& msg) -> coro::task<> {
-            co_await processMessageAysnc(msg);
-        });
-
+        onebotIO->onEvent<GroupMsg>(processMessageAysnc);
+        onebotIO->onEvent<PrivateMsg>(processMessageAysnc);
         onebotIO->onEvent<ConnectEvent>([](const ConnectEvent& msg) -> coro::task<> {
             std::cout << "websocket已连接！ID: " << msg.self_id << std::endl;
             co_return;
