@@ -266,6 +266,29 @@ namespace yobot {
 
     namespace clanbattle {
         namespace detail {
+            struct ChallengerDetail
+            {
+                bool is_continue;
+                std::uint64_t behalf;
+                bool tree;
+                std::string msg;
+            };
+
+            NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(ChallengerDetail, is_continue, behalf, tree, msg);
+
+            struct Challenge
+            {
+                std::uint64_t userId;
+                std::time_t time;
+                int lap;
+                int bossNum;
+                std::int64_t bossHP;
+                std::int64_t damage;
+                bool isContinue;
+                std::string message;
+                std::uint64_t behafId;
+            };
+
             class Group
             {
             public:
@@ -326,7 +349,72 @@ namespace yobot {
                     );
                 }
 
-                void insertChallenge(int bossNum, std::uint64_t userId, std::uint64_t behalfId)
+                void setChallenger(int bossNum, std::uint64_t userId, const ChallengerDetail& detail)
+                {
+                    updateChanllengerList([=](json& list) {
+                        list[std::to_string(bossNum)][std::to_string(userId)] = detail;
+                    });
+                }
+
+
+                void removeChallenger(int bossNum, std::uint64_t userId)
+                {
+                    updateChanllengerList([=](json& list) {
+                        if (!list[std::to_string(bossNum)][std::to_string(userId)].is_null())
+                        {
+                            list[std::to_string(bossNum)].erase(std::to_string(userId));
+                        }
+                    });
+                }
+
+
+                void pushChallenge(const Challenge& challenge)
+                {
+                    auto db = m_pool->get();
+                    db(
+                        insert_into(m_clanChallenge)
+                        .set(
+                            m_clanChallenge.behalf = challenge.behafId,
+                            m_clanChallenge.bid = select(m_clanGroup.battleId).from(m_clanGroup).where(m_clanGroup.groupId == m_groupID),
+                            m_clanChallenge.bossCycle = challenge.lap,
+                            m_clanChallenge.bossHealthRemain = challenge.bossHP,
+                            m_clanChallenge.bossNum = challenge.bossNum,
+                            m_clanChallenge.challengeDamage = challenge.damage,
+                            m_clanChallenge.challengePcrdate = challenge.time,
+                            m_clanChallenge.challengePcrtime = challenge.time,
+                            m_clanChallenge.gid = m_groupID,
+                            m_clanChallenge.isContinue = (int)challenge.isContinue,
+                            m_clanChallenge.message = challenge.message,
+                            m_clanChallenge.qqid = challenge.userId
+                        )
+                    );
+                }
+
+                void popChallenge()
+                {
+                    auto db = m_pool->get();
+                    auto lastChallenge = db(
+                        select(all_of(m_clanChallenge))
+                        .from(m_clanChallenge.left_outer_join(m_clanGroup).on(m_clanChallenge.bid == m_clanGroup.battleId))
+                        .where(m_clanChallenge.cid == 
+                            select(max(m_clanChallenge.cid))
+                            .from(m_clanChallenge)
+                            .where(m_clanChallenge.gid == m_groupID)
+                        )
+                    );
+                    for (auto&& x : lastChallenge)
+                    {
+                        
+                    }
+                }
+
+            private:
+                void updateStatusInternal()
+                {
+                   
+                }
+
+                void updateChanllengerList(const std::function<void(json&)> &func)
                 {
                     auto db = m_pool->get();
                     auto raw = db(
@@ -335,31 +423,19 @@ namespace yobot {
                         .where(m_clanGroup.groupId == m_groupID)
                     );
                     auto list = raw.empty() ? json{} : json::parse(raw.begin()->challengingMemberList.value());
-                    list[std::to_string(bossNum)][std::to_string(userId)] = {
-                        {"is_continue", false},
-                        {"behalf", behalfId},
-                        {"s", 0},
-                        {"damage",0},
-                        {"tree", false},
-                        {"msg", ""}
-                    };
-                }
-
-                void insertDamege(int bossNum, std::int64_t damege, std::uint64_t userId, std::uint64_t behalfId)
-                {
-                    
-                }
-
-            private:
-                void updateStatusInternal()
-                {
-
+                    func(list);
+                    db(
+                        update(m_clanGroup)
+                        .set(m_clanGroup.challengingMemberList = list.dump())
+                        .where(m_clanGroup.groupId == m_groupID)
+                    );
                 }
 
             private:
                 std::shared_ptr<DB_Pool> m_pool;
                 std::uint64_t m_groupID;
                 data::ClanGroup m_clanGroup;
+                data::ClanChallenge m_clanChallenge;
             };
 
             inline std::int8_t getPhase(const std::int64_t lap, const std::string& gameServer)
