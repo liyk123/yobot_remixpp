@@ -360,7 +360,7 @@ namespace yobot {
                 void removeChallenger(int bossNum, std::uint64_t userId)
                 {
                     updateChanllengerList([=](json& list) {
-                        if (!list[std::to_string(bossNum)][std::to_string(userId)].is_null())
+                        if (!list[std::to_string(bossNum)].is_null() && !list[std::to_string(bossNum)][std::to_string(userId)].is_null())
                         {
                             list[std::to_string(bossNum)].erase(std::to_string(userId));
                         }
@@ -371,11 +371,15 @@ namespace yobot {
                 void pushChallenge(const Challenge& challenge)
                 {
                     auto db = m_pool->get();
+                    auto bid = 
+                        select(m_clanGroup.battleId)
+                        .from(m_clanGroup)
+                        .where(m_clanGroup.groupId == m_groupID);
                     db(
                         insert_into(m_clanChallenge)
                         .set(
                             m_clanChallenge.behalf = challenge.behafId,
-                            m_clanChallenge.bid = select(m_clanGroup.battleId).from(m_clanGroup).where(m_clanGroup.groupId == m_groupID),
+                            m_clanChallenge.bid = bid,
                             m_clanChallenge.bossCycle = challenge.lap,
                             m_clanChallenge.bossHealthRemain = challenge.bossHP,
                             m_clanChallenge.bossNum = challenge.bossNum,
@@ -393,18 +397,22 @@ namespace yobot {
                 void popChallenge()
                 {
                     auto db = m_pool->get();
-                    auto lastChallenge = db(
+                    auto challengeJoinGroup = 
+                        m_clanChallenge
+                        .left_outer_join(m_clanGroup)
+                        .on(m_clanChallenge.bid == m_clanGroup.battleId);
+                    auto maxCid = 
+                        select(max(m_clanChallenge.cid))
+                        .from(m_clanChallenge)
+                        .where(m_clanChallenge.gid == m_groupID);
+                    auto raws = db(
                         select(all_of(m_clanChallenge))
-                        .from(m_clanChallenge.left_outer_join(m_clanGroup).on(m_clanChallenge.bid == m_clanGroup.battleId))
-                        .where(m_clanChallenge.cid == 
-                            select(max(m_clanChallenge.cid))
-                            .from(m_clanChallenge)
-                            .where(m_clanChallenge.gid == m_groupID)
-                        )
+                        .from(challengeJoinGroup)
+                        .where(m_clanChallenge.cid == maxCid)
                     );
-                    for (auto&& x : lastChallenge)
+                    for (auto&& raw : raws)
                     {
-                        
+                        std::cout << raw.bid << std::endl;
                     }
                 }
 
@@ -465,7 +473,7 @@ namespace yobot {
                 for (size_t i = 1; i <= 5; i++)
                 {
                     auto strI = std::to_string(i);
-                    bool chanllenging = !chalList.is_discarded() && !chalList[strI].is_null();
+                    bool chanllenging = !chalList.is_discarded() && !chalList[strI].empty();
                     auto& HPList = (thisHPList[strI] == 0 ? nextHPList : thisHPList);
                     auto HP = HPList[strI].get<std::int64_t>();
                     auto fullHP = lapHPList[i - 1].get<std::int64_t>();
@@ -774,16 +782,11 @@ namespace yobot {
 void test()
 {
     try {
-        const std::regex re(R"(\[\s*(\d+),\s*([wWkK]|万|千),\s*(\[\s*\d+(?:,\s*\d+){4}\s*\]),\s*(\[\s*\d+(?:,\s*\d+){4}\s*\])\s*\]$)");
-        std::smatch matches;
-        std::string str = "[30,万,[2000,2000,3000,4000,50000],[1,5,3,4,5]]";
-        if (std::regex_search(str, matches, re))
-        {
-            for (auto&& x : matches)
-            {
-                std::cout << x.str() << std::endl;
-            }
-        }
+        json j;
+        j["1"]["b"] = 1;
+        std::cout << j << std::endl;
+        j = nullptr;
+        std::cout << j["1"].empty() << std::endl;
     }
     catch (std::exception e) {
         std::cout << e.what() << std::endl;
