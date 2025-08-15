@@ -30,6 +30,7 @@ namespace yobot {
     using twobot::Event::ConnectEvent;
     using DB_Pool = sqlpp::sqlite3::connection_pool;
     using DB_Config = sqlpp::sqlite3::connection_config;
+    using DB_Connection = sqlpp::sqlite3::pooled_connection;
     using Message = std::variant<GroupMsg, PrivateMsg>;
     using Action = std::function<std::string(const Message&)>;
     using RegexAction = std::pair<const std::regex&, const Action&>;
@@ -305,7 +306,15 @@ namespace yobot {
                 Group(Group&&) = default;
 
             public:
-                using status = std::tuple<std::int64_t, std::string, json, json, json, json>;
+                struct status
+                {
+                    std::int64_t lap;
+                    std::string gameServer;
+                    json challengerList;
+                    json subscribeList;
+                    json thisLapHPList;
+                    json nextLapHPList;
+                };
                 std::optional<status> getStatus()
                 {
                     std::optional<status> ret = std::nullopt;
@@ -321,14 +330,14 @@ namespace yobot {
                         {
                             break;
                         }
-                        ret = std::make_optional<status>(
+                        ret = std::make_optional<status>({
                             raw.bossCycle.value(),
                             raw.gameServer.value(),
                             json::parse(raw.challengingMemberList.value(), nullptr, false),
                             json::parse(raw.subscribeList.value(), nullptr, false),
                             json::parse(raw.nowCycleBossHealth.value()),
                             json::parse(raw.nextCycleBossHealth.value())
-                        );
+                        });
                     }
                     return ret;
                 }
@@ -349,6 +358,15 @@ namespace yobot {
                     );
                 }
 
+                std::string getGameServer()
+                {
+                    return m_pool->get()(
+                        select(m_clanGroup.gameServer)
+                        .from(m_clanGroup)
+                        .where(m_clanGroup.groupId == m_groupID)
+                    ).begin()->gameServer.value();
+                }
+
                 void setChallenger(int bossNum, std::uint64_t userId, const ChallengerDetail& detail)
                 {
                     updateChanllengerList([=](json& list) {
@@ -366,7 +384,6 @@ namespace yobot {
                         }
                     });
                 }
-
 
                 void pushChallenge(const Challenge& challenge)
                 {
@@ -392,6 +409,23 @@ namespace yobot {
                             m_clanChallenge.qqid = challenge.userId
                         )
                     );
+                    
+                    updateStatusInternal([&](status &s) {
+                        if (challenge.bossHP == 0)
+                        {
+                            s.thisLapHPList[std::to_string(challenge.bossNum)] = 0;
+                            int countZero = 0;
+                            for (auto&& x : s.thisLapHPList)
+                            {
+                                x == 0 && ++countZero;
+                            }
+                            if (countZero == 5 && challenge.damage != 0)
+                            {
+                                 ++s.lap;
+                            }
+                        }
+
+                    });
                 }
 
                 void popChallenge()
@@ -412,14 +446,28 @@ namespace yobot {
                     );
                     for (auto&& raw : raws)
                     {
-                        std::cout << raw.bid << std::endl;
+                        
                     }
                 }
 
             private:
-                void updateStatusInternal()
+                void updateStatusInternal(const std::function<void(status&)>& func)
                 {
-                   
+                    auto s = *getStatus();
+                    func(s);
+                    auto db = m_pool->get();
+                    db(
+                        update(m_clanGroup)
+                        .set(
+                            m_clanGroup.bossCycle = s.lap,
+                            m_clanGroup.challengingMemberList = s.challengerList.dump(),
+                            m_clanGroup.subscribeList = s.subscribeList.dump(),
+                            m_clanGroup.gameServer = s.gameServer,
+                            m_clanGroup.nowCycleBossHealth = s.thisLapHPList.dump(),
+                            m_clanGroup.nextCycleBossHealth = s.nextLapHPList.dump()
+                        )
+                        .where(m_clanGroup.groupId == m_groupID)
+                    );
                 }
 
                 void updateChanllengerList(const std::function<void(json&)> &func)
@@ -464,7 +512,6 @@ namespace yobot {
 
             std::string toText(Group::status& status)
             {
-                std::cout << status << std::endl;
                 auto& globalConfig = std::get<2>(getInstance());
                 const auto&& [lap, gameServer, subList, chalList, thisHPList, nextHPList] = std::move(status);
                 auto phase = getPhase(lap, gameServer);
@@ -615,7 +662,7 @@ namespace yobot {
                         json::array_t thisHPList = json::parse(matches[3].str());
                         json::array_t nextHPList = json::parse(matches[4].str());
                         auto group = detail::Group(msg.group_id);
-                        std::string gameServer = std::get<1>(*group.getStatus());
+                        auto gameServer = group.getGameServer();
                         if (checkAndFilterProgress(gameServer, lap, unit, thisHPList, nextHPList))
                         {
                             group.setStatus(lap, adaptHPList(thisHPList), adaptHPList(nextHPList));
@@ -633,7 +680,7 @@ namespace yobot {
             void resetProgess(const std::uint64_t group_id)
             {
                 auto group = detail::Group(group_id);
-                std::string gameServer = std::get<1>(*group.getStatus());
+                auto gameServer = group.getGameServer();
                 auto& globalConfig = std::get<2>(getInstance());
                 auto phase = getPhase(1, gameServer);
                 auto& lapHPList = globalConfig["boss_hp"][gameServer][1].get_ref<const ordered_json::array_t&>();
@@ -783,10 +830,12 @@ void test()
 {
     try {
         json j;
-        j["1"]["b"] = 1;
-        std::cout << j << std::endl;
-        j = nullptr;
-        std::cout << j["1"].empty() << std::endl;
+        j["1"] = 1;
+        j["2"] = 2;
+        for (auto&& x : j)
+        {
+            std::cout << x << std::endl;
+        }
     }
     catch (std::exception e) {
         std::cout << e.what() << std::endl;
