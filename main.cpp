@@ -306,6 +306,17 @@ namespace yobot {
                 Group(Group&&) = default;
 
             public:
+                explicit operator bool() const
+                {
+                    auto r = m_pool->get()(
+                        select(m_clanGroup.deleted)
+                        .from(m_clanGroup)
+                        .where(m_clanGroup.groupId == m_groupID)
+                    );
+                    return r.empty() ? false : !r.begin()->deleted.value();
+                }
+
+            public:
                 struct status
                 {
                     std::int64_t lap;
@@ -315,31 +326,23 @@ namespace yobot {
                     json thisLapHPList;
                     json nextLapHPList;
                 };
-                std::optional<status> getStatus()
+                status getStatus()
                 {
-                    std::optional<status> ret = std::nullopt;
                     auto db = m_pool->get();
                     auto raws = db(
                         select(all_of(m_clanGroup))
                         .from(m_clanGroup)
                         .where(m_clanGroup.groupId == m_groupID)
                     );
-                    for (const auto& raw : raws)
-                    {
-                        if (raw.deleted)
-                        {
-                            break;
-                        }
-                        ret = std::make_optional<status>({
-                            raw.bossCycle.value(),
-                            raw.gameServer.value(),
-                            json::parse(raw.challengingMemberList.value(), nullptr, false),
-                            json::parse(raw.subscribeList.value(), nullptr, false),
-                            json::parse(raw.nowCycleBossHealth.value()),
-                            json::parse(raw.nextCycleBossHealth.value())
-                        });
-                    }
-                    return ret;
+                    auto &raw = *raws.begin();
+                    return {
+                        raw.bossCycle.value(),
+                        raw.gameServer.value(),
+                        json::parse(raw.challengingMemberList.value(), nullptr, false),
+                        json::parse(raw.subscribeList.value(), nullptr, false),
+                        json::parse(raw.nowCycleBossHealth.value()),
+                        json::parse(raw.nextCycleBossHealth.value())
+                    };
                 }
 
                 void setStatus(const std::int64_t lap, const json& thisLapBossHealth, const json& nextLapBossHealth)
@@ -411,18 +414,40 @@ namespace yobot {
                     );
                     
                     updateStatusInternal([&](status &s) {
+                        auto strI = std::to_string(challenge.bossNum);
+                        s.challengerList[strI];
+                        if (challenge.damage == 0)
+                        {
+                            return;
+                        }
                         if (challenge.bossHP == 0)
                         {
-                            s.thisLapHPList[std::to_string(challenge.bossNum)] = 0;
+                            s.thisLapHPList[strI] = 0;
                             int countZero = 0;
                             for (auto&& x : s.thisLapHPList)
                             {
                                 x == 0 && ++countZero;
                             }
-                            if (countZero == 5 && challenge.damage != 0)
+                            if (countZero == 5)
                             {
-                                 ++s.lap;
+                                ++s.lap;
+                                auto thisPhase = getPhase(s.lap, s.gameServer);
+                                auto nextPhase = getPhase(s.lap + 1, s.gameServer);
+                                auto& globalConfig = std::get<2>(getInstance());
+                                if (thisPhase != nextPhase)
+                                {
+                                    s.thisLapHPList = s.nextLapHPList;
+                                    s.nextLapHPList = { {"1",0},{"2",0},{"3",0},{"4",0},{"5",0} };
+                                }
+                                else
+                                {
+                                    auto& lapHPList = globalConfig["boss_hp"][s.gameServer][nextPhase].get_ref<const ordered_json::array_t&>();
+                                }
                             }
+                        }
+                        else
+                        {
+
                         }
 
                     });
@@ -453,7 +478,7 @@ namespace yobot {
             private:
                 void updateStatusInternal(const std::function<void(status&)>& func)
                 {
-                    auto s = *getStatus();
+                    auto s = getStatus();
                     func(s);
                     auto db = m_pool->get();
                     db(
@@ -510,10 +535,10 @@ namespace yobot {
                 return ret;
             }
 
-            std::string toText(Group::status& status)
+            std::string toText(const Group::status& status)
             {
                 auto& globalConfig = std::get<2>(getInstance());
-                const auto&& [lap, gameServer, subList, chalList, thisHPList, nextHPList] = std::move(status);
+                auto& [lap, gameServer, subList, chalList, thisHPList, nextHPList] = status;
                 auto phase = getPhase(lap, gameServer);
                 std::string message = std::format("现在是{}阶段，第{}周目：", (char)(phase + 'A'), lap);
                 auto& lapHPList = globalConfig["boss_hp"][gameServer][phase].get_ref<const ordered_json::array_t&>();
@@ -529,16 +554,16 @@ namespace yobot {
                     auto rate = percent / 10;
 					rate = ((rate == 0) ? (HP != 0) : rate);
                     auto chalStr = (chanllenging ? "有" : "无");
-					message += std::format("\n{}. {:02}%【{:■<{}}{:□<{}}】{}人", i, percent, "", rate, "", 10 - rate, chalStr);
+					message += std::format("\n{}.【{:■<{}}{:□<{}}】{:02}% {}人", i, "", rate, "", 10 - rate, percent, chalStr);
                 }
                 return message;
             }
 
             inline std::string showProgess(const std::uint64_t groud_id)
             {
-                if (auto status = Group(groud_id).getStatus())
+                if (auto group = Group(groud_id))
                 {
-                    return toText(*status);
+                    return toText(group.getStatus());
                 }
                 return Group404ErrorResponse;
             }
@@ -711,7 +736,7 @@ namespace yobot {
 				return std::visit([](auto&& x) -> std::string {
 					if constexpr (std::is_convertible_v<decltype(x), GroupMsg>)
                     {
-                        return !detail::Group(x.group_id).getStatus()
+                        return !detail::Group(x.group_id)
                             ? Group404ErrorResponse 
                             : detail::setProgress(x) 
                                 ? "进度已修改：\n" + detail::showProgess(x.group_id) 
@@ -730,7 +755,7 @@ namespace yobot {
                 return std::visit([](auto&& x) -> std::string {
                     if constexpr (std::is_convertible_v<decltype(x), GroupMsg>)
                     {
-                        return !detail::Group(x.group_id).getStatus()
+                        return !detail::Group(x.group_id)
                             ? Group404ErrorResponse
                             : (detail::resetProgess(x.group_id), "进度已重置：\n" + detail::showProgess(x.group_id));
                     }
