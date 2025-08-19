@@ -290,6 +290,33 @@ namespace yobot {
                 std::uint64_t behafId;
             };
 
+            inline std::int8_t getPhase(const std::int64_t lap, const std::string& gameServer)
+            {
+                char ret = 0;
+                auto& globalConfig = std::get<2>(getInstance());
+                auto& phaseList = globalConfig["lap_range"][gameServer].get_ref<const ordered_json::array_t&>();
+                for (auto&& range : phaseList)
+                {
+                    if (lap >= range[0] && lap <= range[1])
+                    {
+                        break;
+                    }
+                    ret++;
+                }
+                return ret;
+            }
+
+            inline json adaptHPList(const std::ranges::range auto& list)
+            {
+                json ret = {};
+                for (int i = 0; i < 5; i++)
+                {
+                    auto strI = std::to_string(i + 1);
+                    ret[strI] = list[i];
+                }
+                return ret;
+            }
+
             class Group
             {
             public:
@@ -414,8 +441,9 @@ namespace yobot {
                     );
                     
                     updateStatusInternal([&](status &s) {
+                        static const json zeroHPList = { {"1", 0}, { "2",0 }, { "3",0 }, { "4",0 }, { "5",0 } };
                         auto strI = std::to_string(challenge.bossNum);
-                        s.challengerList[strI];
+                        s.challengerList[strI].erase(std::to_string(challenge.userId));
                         if (challenge.damage == 0)
                         {
                             return;
@@ -423,25 +451,26 @@ namespace yobot {
                         if (challenge.bossHP == 0)
                         {
                             s.thisLapHPList[strI] = 0;
-                            int countZero = 0;
-                            for (auto&& x : s.thisLapHPList)
-                            {
-                                x == 0 && ++countZero;
-                            }
-                            if (countZero == 5)
+                            if (s.thisLapHPList == zeroHPList)
                             {
                                 ++s.lap;
                                 auto thisPhase = getPhase(s.lap, s.gameServer);
                                 auto nextPhase = getPhase(s.lap + 1, s.gameServer);
                                 auto& globalConfig = std::get<2>(getInstance());
+                                s.thisLapHPList = s.nextLapHPList;
                                 if (thisPhase != nextPhase)
                                 {
-                                    s.thisLapHPList = s.nextLapHPList;
-                                    s.nextLapHPList = { {"1",0},{"2",0},{"3",0},{"4",0},{"5",0} };
+                                    s.nextLapHPList = zeroHPList;
                                 }
                                 else
                                 {
-                                    auto& lapHPList = globalConfig["boss_hp"][s.gameServer][nextPhase].get_ref<const ordered_json::array_t&>();
+                                    auto& ref = globalConfig["boss_hp"][s.gameServer][thisPhase].get_ref<const ordered_json::array_t&>();
+                                    auto lapHPList = adaptHPList(ref);
+                                    if (s.nextLapHPList == zeroHPList)
+                                    {
+                                        s.thisLapHPList = lapHPList;
+                                    }
+                                    s.nextLapHPList = lapHPList;
                                 }
                             }
                         }
@@ -519,21 +548,7 @@ namespace yobot {
                 data::ClanChallenge m_clanChallenge;
             };
 
-            inline std::int8_t getPhase(const std::int64_t lap, const std::string& gameServer)
-            {
-                char ret = 0;
-                auto& globalConfig = std::get<2>(getInstance());
-                auto& phaseList = globalConfig["lap_range"][gameServer].get_ref<const ordered_json::array_t&>();
-                for (auto&& range : phaseList)
-                {
-                    if (lap >= range[0] && lap <= range[1])
-                    {
-                        break;
-                    }
-                    ret++;
-                }
-                return ret;
-            }
+
 
             std::string toText(const Group::status& status)
             {
@@ -655,17 +670,6 @@ namespace yobot {
                 filterHPList(thisHPList, nextHPList, lapHPList, isOverlap, unit);
 
                 return true;
-            }
-            
-            inline json adaptHPList(const std::ranges::range auto& list)
-            {
-				json ret = {};
-				for (int i = 0; i < 5; i++)
-				{
-					auto strI = std::to_string(i + 1);
-					ret[strI] = list[i];
-				}
-				return ret;
             }
 
             bool setProgress(const GroupMsg& msg)
