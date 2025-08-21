@@ -290,6 +290,16 @@ namespace yobot {
                 std::uint64_t behafId;
             };
 
+            struct status
+            {
+                std::int64_t lap;
+                std::string gameServer;
+                json challengerList;
+                json subscribeList;
+                json thisLapHPList;
+                json nextLapHPList;
+            };
+
             inline std::int8_t getPhase(const std::int64_t lap, const std::string& gameServer)
             {
                 char ret = 0;
@@ -315,6 +325,42 @@ namespace yobot {
                     ret[strI] = list[i];
                 }
                 return ret;
+            }
+
+            inline void recordChallenge(const Challenge& challenge, status& s)
+            {
+                static const json zeroHPList = { {"1", 0}, { "2",0 }, { "3",0 }, { "4",0 }, { "5",0 } };
+                auto strI = std::to_string(challenge.bossNum);
+                s.challengerList[strI].erase(std::to_string(challenge.userId));
+                s.thisLapHPList[strI] = challenge.bossHP;
+                if (challenge.damage == 0)
+                {
+                    return;
+                }
+                if (challenge.bossHP == 0)
+                {
+                    if (s.thisLapHPList == zeroHPList)
+                    {
+                        ++s.lap;
+                        auto thisPhase = getPhase(s.lap, s.gameServer);
+                        auto nextPhase = getPhase(s.lap + 1, s.gameServer);
+                        auto& globalConfig = std::get<2>(getInstance());
+                        s.thisLapHPList = s.nextLapHPList;
+                        if (thisPhase != nextPhase)
+                        {
+                            s.nextLapHPList = zeroHPList;
+                        }
+                        else
+                        {
+                            auto lapHPList = adaptHPList(globalConfig["boss_hp"][s.gameServer][thisPhase].get_ref<const ordered_json::array_t&>());
+                            if (s.nextLapHPList == zeroHPList)
+                            {
+                                s.thisLapHPList = lapHPList;
+                            }
+                            s.nextLapHPList = lapHPList;
+                        }
+                    }
+                }
             }
 
             class Group
@@ -344,15 +390,6 @@ namespace yobot {
                 }
 
             public:
-                struct status
-                {
-                    std::int64_t lap;
-                    std::string gameServer;
-                    json challengerList;
-                    json subscribeList;
-                    json thisLapHPList;
-                    json nextLapHPList;
-                };
                 status getStatus()
                 {
                     auto db = m_pool->get();
@@ -441,44 +478,7 @@ namespace yobot {
                     );
                     
                     updateStatusInternal([&](status &s) {
-                        static const json zeroHPList = { {"1", 0}, { "2",0 }, { "3",0 }, { "4",0 }, { "5",0 } };
-                        auto strI = std::to_string(challenge.bossNum);
-                        s.challengerList[strI].erase(std::to_string(challenge.userId));
-                        if (challenge.damage == 0)
-                        {
-                            return;
-                        }
-                        if (challenge.bossHP == 0)
-                        {
-                            s.thisLapHPList[strI] = 0;
-                            if (s.thisLapHPList == zeroHPList)
-                            {
-                                ++s.lap;
-                                auto thisPhase = getPhase(s.lap, s.gameServer);
-                                auto nextPhase = getPhase(s.lap + 1, s.gameServer);
-                                auto& globalConfig = std::get<2>(getInstance());
-                                s.thisLapHPList = s.nextLapHPList;
-                                if (thisPhase != nextPhase)
-                                {
-                                    s.nextLapHPList = zeroHPList;
-                                }
-                                else
-                                {
-                                    auto& ref = globalConfig["boss_hp"][s.gameServer][thisPhase].get_ref<const ordered_json::array_t&>();
-                                    auto lapHPList = adaptHPList(ref);
-                                    if (s.nextLapHPList == zeroHPList)
-                                    {
-                                        s.thisLapHPList = lapHPList;
-                                    }
-                                    s.nextLapHPList = lapHPList;
-                                }
-                            }
-                        }
-                        else
-                        {
-
-                        }
-
+                        recordChallenge(challenge, s);
                     });
                 }
 
@@ -550,7 +550,7 @@ namespace yobot {
 
 
 
-            std::string toText(const Group::status& status)
+            std::string toText(const status& status)
             {
                 auto& globalConfig = std::get<2>(getInstance());
                 auto& [lap, gameServer, subList, chalList, thisHPList, nextHPList] = status;
