@@ -498,10 +498,20 @@ namespace yobot {
                         .from(challengeJoinGroup)
                         .where(m_clanChallenge.cid == maxCid)
                     );
+                    Challenge chal;
                     for (auto&& raw : raws)
                     {
-                        
+                        chal.behafId = raw.behalf;
+                        chal.bossHP = raw.bossHealthRemain;
+                        chal.bossNum = raw.bossNum;
+                        chal.damage = raw.challengeDamage;
+                        chal.time = raw.challengePcrdate + raw.challengePcrtime;
+                        chal.isContinue = raw.isContinue;
+                        chal.lap = raw.bossCycle;
+                        chal.message = raw.message;
+                        chal.userId = raw.qqid;
                     }
+
                 }
 
             private:
