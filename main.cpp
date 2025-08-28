@@ -363,6 +363,31 @@ namespace yobot {
                 }
             }
 
+            inline void revokeChallenge(const Challenge& challenge, status& s)
+            {
+                auto strI = std::to_string(challenge.bossNum);
+                s.challengerList[strI][std::to_string(challenge.userId)] = ChallengerDetail{
+                    .is_continue = challenge.isContinue,
+                    .behalf = challenge.behafId,
+                    .tree = false,
+                    .msg = challenge.message
+                };
+            }
+
+            inline std::time_t toDateOnly(const std::time_t time)
+            {
+                auto timePoint = std::chrono::system_clock::from_time_t(time);
+                auto timeDays = std::chrono::floor<std::chrono::days>(timePoint);
+                return std::chrono::system_clock::to_time_t(timeDays);
+            }
+
+            inline std::time_t toTimeOnly(const std::time_t time)
+            {
+                auto timePoint = std::chrono::system_clock::from_time_t(time);
+                auto timeOnly = timePoint - std::chrono::floor<std::chrono::days>(timePoint);
+                return std::chrono::duration_cast<std::chrono::seconds>(timeOnly).count();
+            }
+
             class Group
             {
             public:
@@ -468,8 +493,8 @@ namespace yobot {
                             m_clanChallenge.bossHealthRemain = challenge.bossHP,
                             m_clanChallenge.bossNum = challenge.bossNum,
                             m_clanChallenge.challengeDamage = challenge.damage,
-                            m_clanChallenge.challengePcrdate = challenge.time,
-                            m_clanChallenge.challengePcrtime = challenge.time,
+                            m_clanChallenge.challengePcrdate = toDateOnly(challenge.time),
+                            m_clanChallenge.challengePcrtime = toTimeOnly(challenge.time),
                             m_clanChallenge.gid = m_groupID,
                             m_clanChallenge.isContinue = (int)challenge.isContinue,
                             m_clanChallenge.message = challenge.message,
@@ -503,15 +528,18 @@ namespace yobot {
                     {
                         chal.behafId = raw.behalf;
                         chal.bossHP = raw.bossHealthRemain;
-                        chal.bossNum = raw.bossNum;
+                        chal.bossNum = (int)raw.bossNum;
                         chal.damage = raw.challengeDamage;
                         chal.time = raw.challengePcrdate + raw.challengePcrtime;
                         chal.isContinue = raw.isContinue;
-                        chal.lap = raw.bossCycle;
+                        chal.lap = (int)raw.bossCycle;
                         chal.message = raw.message;
                         chal.userId = raw.qqid;
                     }
 
+                    updateStatusInternal([&](status& s) {
+                        
+                    });
                 }
 
             private:
@@ -867,18 +895,12 @@ namespace yobot {
 
 void test()
 {
-    try {
-        json j;
-        j["1"] = 1;
-        j["2"] = 2;
-        for (auto&& x : j)
-        {
-            std::cout << x << std::endl;
-        }
-    }
-    catch (std::exception e) {
-        std::cout << e.what() << std::endl;
-    }
+    auto t = std::time(nullptr);
+    auto t1 = t;
+    auto t2 = t1;
+    auto d = yobot::clanbattle::detail::toDateOnly(t1);
+    auto tt = yobot::clanbattle::detail::toTimeOnly(t2);
+    std::cout << t << "\n" << tt + d - t << std::endl;
 }
 
 int main(int argc, char** args)
