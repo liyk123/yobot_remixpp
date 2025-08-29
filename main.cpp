@@ -365,6 +365,7 @@ namespace yobot {
 
             inline void revokeChallenge(const Challenge& challenge, status& s)
             {
+                static const json zeroHPList = { {"1", 0}, { "2",0 }, { "3",0 }, { "4",0 }, { "5",0 } };
                 auto strI = std::to_string(challenge.bossNum);
                 s.challengerList[strI][std::to_string(challenge.userId)] = ChallengerDetail{
                     .is_continue = challenge.isContinue,
@@ -372,6 +373,31 @@ namespace yobot {
                     .tree = false,
                     .msg = challenge.message
                 };
+                if (challenge.bossHP == 0) 
+                {
+                    auto thisPhase = getPhase(s.lap, s.gameServer);
+                    auto lastPhase = getPhase(s.lap - 1, s.gameServer);
+                    auto& globalConfig = std::get<2>(getInstance());
+                    auto thisLapFullHPList = adaptHPList(globalConfig["boss_hp"][s.gameServer][thisPhase].get_ref<const ordered_json::array_t&>());
+                    if (s.thisLapHPList == thisLapFullHPList)
+                    {
+                        --s.lap;
+                        if (thisPhase != lastPhase)
+                        {
+                            if (thisPhase > 1)
+                            {
+                                auto lastLapFullHPList = adaptHPList(globalConfig["boss_hp"][s.gameServer][lastPhase].get_ref<const ordered_json::array_t&>());
+                                s.nextLapHPList = zeroHPList;
+                            }
+                        }
+                        else
+                        {
+                            s.nextLapHPList = thisLapFullHPList;
+                        }
+                        s.thisLapHPList = zeroHPList;
+                    }
+                }
+                s.thisLapHPList[strI] = challenge.bossHP + challenge.damage;
             }
 
             inline std::time_t toDateOnly(const std::time_t time)
