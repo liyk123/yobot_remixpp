@@ -35,7 +35,8 @@ namespace yobot {
     using Action = std::function<std::string(const Message&)>;
     using RegexAction = std::pair<const std::regex&, const Action&>;
     using RegexActionVector = std::vector<RegexAction>;
-    using Instance = std::tuple<std::unique_ptr<twobot::BotInstance>, std::shared_ptr<DB_Pool>, ordered_json, RegexActionVector>;
+    using GroupMutexMap = tbb::concurrent_unordered_map<std::uint64_t, coro::mutex>;
+    using Instance = std::tuple<std::unique_ptr<twobot::BotInstance>, std::shared_ptr<DB_Pool>, ordered_json, RegexActionVector, GroupMutexMap>;
     using BoosData = std::tuple<std::string_view, json::array_t, json::array_t, json::array_t, json::array_t>;
 
     static Instance& getInstance();
@@ -564,8 +565,9 @@ namespace yobot {
                     }
 
                     updateStatusInternal([&](status& s) {
-                        
+                        revokeChallenge(chal, s);
                     });
+                    db(remove_from(m_clanChallenge).where(m_clanChallenge.cid == maxCid));
                 }
 
             private:
@@ -848,7 +850,7 @@ namespace yobot {
             clanbattle::setProgress(),
             clanbattle::resetProgress()
         };
-        return std::make_tuple(std::move(onebotIO), dbPool, globalConfig, std::move(regexActionVec));
+        return std::make_tuple(std::move(onebotIO), dbPool, globalConfig, std::move(regexActionVec), GroupMutexMap{});
     }
 
     static Instance& getInstance()
@@ -866,7 +868,21 @@ namespace yobot {
             auto&& [regex, action] = regexActionVec[it];
             if (std::regex_match(raw_message, regex))
             {
-                response = action(msg);
+                std::visit([&](auto&& x) {
+                    if constexpr (std::is_convertible_v<decltype(x), GroupMsg>)
+                    {
+                        auto groupAction = [](GroupMsg msg, Action action) -> coro::task<std::string> {
+                            GroupMutexMap& groupMutexMap = std::get<4>(yobot::getInstance());
+                            auto lock = co_await groupMutexMap[msg.group_id].scoped_lock();
+                            co_return action(msg);
+                        };
+                        response = coro::sync_wait(groupAction(x, action));
+                    }
+                    if constexpr (std::is_convertible_v<decltype(x), PrivateMsg>)
+                    {
+                        response = action(x);
+                    }
+                }, msg);
             }
         });
         return response;
@@ -921,12 +937,7 @@ namespace yobot {
 
 void test()
 {
-    auto t = std::time(nullptr);
-    auto t1 = t;
-    auto t2 = t1;
-    auto d = yobot::clanbattle::detail::toDateOnly(t1);
-    auto tt = yobot::clanbattle::detail::toTimeOnly(t2);
-    std::cout << t << "\n" << tt + d - t << std::endl;
+
 }
 
 int main(int argc, char** args)
