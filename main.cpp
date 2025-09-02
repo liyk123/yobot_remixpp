@@ -486,10 +486,10 @@ namespace yobot {
                     ).begin()->gameServer.value();
                 }
 
-                void setChallenger(int bossNum, std::uint64_t userId, const ChallengerDetail& detail)
+                void setChallenger(std::string_view bossNum, std::uint64_t userId, const ChallengerDetail& detail)
                 {
                     updateChanllengerList([=](json& list) {
-                        list[std::to_string(bossNum)][std::to_string(userId)] = detail;
+                        list[bossNum][std::to_string(userId)] = detail;
                     });
                 }
 
@@ -568,6 +568,19 @@ namespace yobot {
                         revokeChallenge(chal, s);
                     });
                     db(remove_from(m_clanChallenge).where(m_clanChallenge.cid == maxCid));
+                }
+
+                void clearChallenge()
+                {
+                    auto db = m_pool->get();
+                    auto bid = 
+                        select(m_clanGroup.battleId)
+                        .from(m_clanGroup)
+                        .where(m_clanGroup.groupId == m_groupID);
+                    db(
+                        remove_from(m_clanChallenge)
+                        .where(m_clanChallenge.gid == m_groupID and m_clanChallenge.bid == bid)
+                    );
                 }
 
             private:
@@ -781,6 +794,29 @@ namespace yobot {
                 auto& lapHPList = globalConfig["boss_hp"][gameServer][1].get_ref<const ordered_json::array_t&>();
                 auto HPList = adaptHPList(lapHPList);
                 group.setStatus(1, HPList, HPList);
+                group.clearChallenge();
+            }
+
+            bool applyForChallenge(const GroupMsg& msg)
+            {
+                constexpr auto partenStr = R"((\d+))";
+                static const std::regex parten(partenStr);
+                std::smatch matches;
+                try 
+                {
+                    if (std::regex_search(msg.raw_message, matches, parten))
+                    {
+                        auto bossNum = matches[1].str();
+                        auto group = Group(msg.group_id);
+                        group.setChallenger(bossNum, msg.user_id, {});
+                        return true;
+                    }
+                }
+                catch (std::exception e)
+                {
+                    std::cerr << e.what() << std::endl;
+                }
+                return false;
             }
         }
 
@@ -834,6 +870,25 @@ namespace yobot {
             };
             return { rgx,act };
         }
+
+        inline RegexAction applyForChallenge()
+        {
+            static const std::regex rgx("^申请出刀.*");
+            static const Action act = [](const Message& msg) -> std::string {
+                return std::visit([](auto&& x) -> std::string {
+                    if constexpr (std::is_convertible_v<decltype(x), GroupMsg>)
+                    {
+                        return !detail::Group(x.group_id)
+                            ? Group404ErrorResponse
+                            : detail::applyForChallenge(x) 
+                                ? "申请成功：\n" + detail::showProgess(x.group_id) 
+                                : "您已经申请了";
+                    }
+                    return {};
+                }, msg);
+            };
+            return { rgx, act };
+        }
     }
 
     static Instance construct()
@@ -848,7 +903,8 @@ namespace yobot {
             system::updateData(),
             clanbattle::showProgress(),
             clanbattle::setProgress(),
-            clanbattle::resetProgress()
+            clanbattle::resetProgress(),
+            clanbattle::applyForChallenge()
         };
         return std::make_tuple(std::move(onebotIO), dbPool, globalConfig, std::move(regexActionVec), GroupMutexMap{});
     }
