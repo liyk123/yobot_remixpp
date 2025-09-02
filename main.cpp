@@ -793,7 +793,7 @@ namespace yobot {
                     {
                         return detail::showProgess(x.group_id);
                     }
-                    return "";
+                    return {};
                 }, msg);
 		    };
             return { rgx,act };
@@ -812,7 +812,7 @@ namespace yobot {
                                 ? "进度已修改：\n" + detail::showProgess(x.group_id) 
                                 : "格式错误";
                     }
-                    return "";
+                    return {};
                 }, msg);
             };
             return { rgx,act };
@@ -829,7 +829,7 @@ namespace yobot {
                             ? Group404ErrorResponse
                             : (detail::resetProgess(x.group_id), "进度已重置：\n" + detail::showProgess(x.group_id));
                     }
-                    return "";
+                    return {};
                 }, msg);
             };
             return { rgx,act };
@@ -859,60 +859,52 @@ namespace yobot {
         return g_instance;
     }
 
-    inline std::string parallelForEachAction(const Message& msg)
+    inline coro::task<> groupAction(twobot::ApiSet apiSet, GroupMsg msg, Action action)
+    {
+        auto& groupMutexMap = std::get<4>(yobot::getInstance());
+        auto response = std::string{};
+        {
+            auto lock = co_await groupMutexMap[msg.group_id].scoped_lock();
+            response = action(msg);
+        }
+        if (!response.empty())
+        {
+            co_await apiSet.sendGroupMsg(msg.group_id, response);
+        }
+    }
+
+    inline coro::task<> privateAction(twobot::ApiSet apiSet, PrivateMsg msg, Action action)
+    {
+        auto response = action(msg);
+        if (!response.empty())
+        {
+            co_await apiSet.sendPrivateMsg(msg.user_id, response);
+        }
+    }
+
+    inline coro::task<> processMessageAysnc(const Message& msg)
     {
         auto& regexActionVec = std::get<3>(yobot::getInstance());
         auto raw_message = std::visit([](auto&& x) { return x.raw_message; }, msg);
-        std::string response;
+        auto ret = []() -> coro::task<> { co_return; }();
         tbb::parallel_for(0ULL, regexActionVec.size(), [&](std::size_t it) {
             auto&& [regex, action] = regexActionVec[it];
             if (std::regex_match(raw_message, regex))
             {
-                std::visit([&](auto&& x) {
+                ret = std::visit([&](auto&& x) -> coro::task<> {
+                    auto apiSet = std::get<0>(yobot::getInstance())->getApiSet(x.self_id);
                     if constexpr (std::is_convertible_v<decltype(x), GroupMsg>)
                     {
-                        auto groupAction = [](GroupMsg msg, Action action) -> coro::task<std::string> {
-                            GroupMutexMap& groupMutexMap = std::get<4>(yobot::getInstance());
-                            auto lock = co_await groupMutexMap[msg.group_id].scoped_lock();
-                            co_return action(msg);
-                        };
-                        response = coro::sync_wait(groupAction(x, action));
+                        return groupAction(apiSet, x, action);
                     }
                     if constexpr (std::is_convertible_v<decltype(x), PrivateMsg>)
                     {
-                        response = action(x);
+                        return privateAction(apiSet, x, action);
                     }
                 }, msg);
             }
         });
-        return response;
-    }
-
-    coro::task<> processMessageAysnc(const Message& msg)
-    {
-        std::string response = yobot::parallelForEachAction(msg);
-        if (!response.empty())
-        {
-            return std::visit([&](auto&& x) -> coro::task<> {
-                auto& onebotIO = std::get<0>(yobot::getInstance());
-                auto apiSet = onebotIO->getApiSet(x.self_id);
-                if constexpr (std::is_convertible_v<decltype(x), GroupMsg>)
-                {
-                    static const auto sendGroupMsg = [](twobot::ApiSet apiSet, std::uint64_t groud_id, std::string message) -> coro::task<> {
-                        co_await apiSet.sendGroupMsg(groud_id, message);
-                    };
-                    return sendGroupMsg(apiSet, x.group_id, response);
-                }
-                if constexpr (std::is_convertible_v<decltype(x), PrivateMsg>)
-                {
-                    static const auto sendPrivateMsg = [](twobot::ApiSet apiSet, std::uint64_t user_id, std::string message) -> coro::task<> {
-                        co_await apiSet.sendPrivateMsg(user_id, message);
-                    };
-                    return sendPrivateMsg(apiSet, x.user_id, response);
-                }
-            }, msg);
-        }
-        return []() -> coro::task<> { co_return; }();
+        return ret;
     }
 
     void initialize()
