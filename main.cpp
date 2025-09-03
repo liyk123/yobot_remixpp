@@ -494,12 +494,12 @@ namespace yobot {
                 }
 
 
-                void removeChallenger(int bossNum, std::uint64_t userId)
+                void removeChallenger(std::string_view bossNum, std::uint64_t userId)
                 {
                     updateChanllengerList([=](json& list) {
-                        if (!list[std::to_string(bossNum)].is_null() && !list[std::to_string(bossNum)][std::to_string(userId)].is_null())
+                        if (!list[bossNum].is_null() && !list[bossNum][std::to_string(userId)].is_null())
                         {
-                            list[std::to_string(bossNum)].erase(std::to_string(userId));
+                            list[bossNum].erase(std::to_string(userId));
                         }
                     });
                 }
@@ -802,16 +802,21 @@ namespace yobot {
                 return s.thisLapHPList[bossNum] != 0 || s.nextLapHPList[bossNum] != 0;
             }
 
-            inline bool isApplied(const status& s, const std::uint64_t user_id)
+            inline std::string getApplicationNum(const status& s, const std::uint64_t user_id)
             {
-                for (auto&& boss : s.challengerList)
+                for (auto it = s.challengerList.begin(); it != s.challengerList.end(); it++)
                 {
-                    if (boss.contains(std::to_string(user_id)))
+                    if (it.value().contains(std::to_string(user_id)))
                     {
-                        return true;
+                        return it.key();
                     }
                 }
-                return false;
+                return {};
+            }
+
+            inline bool isApplied(const status& s, const std::uint64_t user_id)
+            {
+                return !getApplicationNum(s, user_id).empty();
             }
 
             bool applyForChallenge(const GroupMsg& msg)
@@ -842,6 +847,19 @@ namespace yobot {
                 catch (std::exception e)
                 {
                     std::cerr << e.what() << std::endl;
+                }
+                return false;
+            }
+
+            bool cancelApplyForChallenge(const GroupMsg& msg)
+            {
+                auto group = Group(msg.group_id);
+                auto s = group.getStatus();
+                auto bossNum = getApplicationNum(s, msg.user_id);
+                if (!bossNum.empty())
+                {
+                    group.removeChallenger(bossNum, msg.user_id);
+                    return true;
                 }
                 return false;
             }
@@ -914,6 +932,25 @@ namespace yobot {
                     return {};
                 }, msg);
             };
+            return { rgx, act };
+        }
+
+        inline RegexAction cancelApplyForChallenge()
+        {
+            static const std::regex rgx("取消申请");
+            static const Action act = [](const Message& msg) -> std::string {
+                return std::visit([](auto&& x) -> std::string {
+                    if constexpr (std::is_convertible_v<decltype(x), GroupMsg>)
+                    {
+                        return !detail::Group(x.group_id)
+                            ? Group404ErrorResponse
+                            : detail::cancelApplyForChallenge(x)
+                                ? "取消申请成功：\n" + detail::showProgess(x.group_id)
+                                : "没有申请出刀";
+                    }
+                    return {};
+                    }, msg);
+                };
             return { rgx, act };
         }
     }
