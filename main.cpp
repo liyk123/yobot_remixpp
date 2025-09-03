@@ -797,9 +797,26 @@ namespace yobot {
                 group.clearChallenge();
             }
 
+			inline bool isBossAlive(const status& s, const std::string& bossNum)
+            {
+                return s.thisLapHPList[bossNum] != 0 || s.nextLapHPList[bossNum] != 0;
+            }
+
+            inline bool isApplied(const status& s, const std::uint64_t user_id)
+            {
+                for (auto&& boss : s.challengerList)
+                {
+                    if (boss.contains(std::to_string(user_id)))
+                    {
+                        return true;
+                    }
+                }
+                return false;
+            }
+
             bool applyForChallenge(const GroupMsg& msg)
             {
-                constexpr auto partenStr = R"((\d+))";
+                constexpr auto partenStr = R"((\d)\s*(:|：|\s)?\s*(\S*))";
                 static const std::regex parten(partenStr);
                 std::smatch matches;
                 try 
@@ -808,8 +825,18 @@ namespace yobot {
                     {
                         auto bossNum = matches[1].str();
                         auto group = Group(msg.group_id);
-                        group.setChallenger(bossNum, msg.user_id, {});
-                        return true;
+                        auto s = group.getStatus();
+						bool isMatched = ((matches[2].length() != 0) || (matches[3].length() == 0));
+                        if (isMatched && !isBossAlive(s, bossNum) && !isApplied(s, msg.user_id))
+                        {
+                            bool isContinue = (msg.raw_message.find("补") != std::string::npos);
+                            auto message = matches[3].str();
+                            group.setChallenger(bossNum, msg.user_id, {
+                                .is_continue = isContinue,
+                                .msg = message
+                            });
+                            return true;
+                        }
                     }
                 }
                 catch (std::exception e)
@@ -873,7 +900,7 @@ namespace yobot {
 
         inline RegexAction applyForChallenge()
         {
-            static const std::regex rgx("^申请出刀.*");
+            static const std::regex rgx("^申请(出|补|出补)刀.*");
             static const Action act = [](const Message& msg) -> std::string {
                 return std::visit([](auto&& x) -> std::string {
                     if constexpr (std::is_convertible_v<decltype(x), GroupMsg>)
@@ -882,7 +909,7 @@ namespace yobot {
                             ? Group404ErrorResponse
                             : detail::applyForChallenge(x) 
                                 ? "申请成功：\n" + detail::showProgess(x.group_id) 
-                                : "您已经申请了";
+                                : "申请失败，格式或状态错误";
                     }
                     return {};
                 }, msg);
@@ -985,7 +1012,21 @@ namespace yobot {
 
 void test()
 {
-
+    constexpr auto partenStr = R"((\d)\s*(:|：|\s)?\s*(\S*))";
+    static const std::regex parten(partenStr);
+    std::smatch matches;
+    std::string str = "申请出刀1\naaaaa";
+    try
+    {
+        if (std::regex_search(str, matches, parten))
+        {
+            std::cout << matches[1] << matches[2]<< matches[3] << std::endl;
+        }
+    }
+    catch (std::exception e)
+    {
+        std::cout << e.what() << std::endl;
+    }
 }
 
 int main(int argc, char** args)
