@@ -935,24 +935,24 @@ namespace yobot {
             return { rgx, act };
         }
 
-        inline RegexAction cancelApplyForChallenge()
-        {
-            static const std::regex rgx("取消申请");
-            static const Action act = [](const Message& msg) -> std::string {
-                return std::visit([](auto&& x) -> std::string {
-                    if constexpr (std::is_convertible_v<decltype(x), GroupMsg>)
-                    {
-                        return !detail::Group(x.group_id)
-                            ? Group404ErrorResponse
-                            : detail::cancelApplyForChallenge(x)
-                                ? "取消申请成功：\n" + detail::showProgess(x.group_id)
-                                : "没有申请出刀";
-                    }
-                    return {};
-                    }, msg);
-                };
-            return { rgx, act };
-        }
+        //inline RegexAction cancelApplyForChallenge()
+        //{
+        //    static const std::regex rgx("取消申请");
+        //    static const Action act = [](const Message& msg) -> std::string {
+        //        return std::visit([](auto&& x) -> std::string {
+        //            if constexpr (std::is_convertible_v<decltype(x), GroupMsg>)
+        //            {
+        //                return !detail::Group(x.group_id)
+        //                    ? Group404ErrorResponse
+        //                    : detail::cancelApplyForChallenge(x)
+        //                        ? "取消申请成功：\n" + detail::showProgess(x.group_id)
+        //                        : "没有申请出刀";
+        //            }
+        //            return {};
+        //        }, msg);
+        //    };
+        //    return { rgx, act };
+        //}
     }
 
     static Instance construct()
@@ -968,7 +968,9 @@ namespace yobot {
             clanbattle::showProgress(),
             clanbattle::setProgress(),
             clanbattle::resetProgress(),
-            clanbattle::applyForChallenge()
+            clanbattle::applyForChallenge(),
+            clanbattle::cancelApplyForChallenge()
+
         };
         return std::make_tuple(std::move(onebotIO), dbPool, globalConfig, std::move(regexActionVec), GroupMutexMap{});
     }
