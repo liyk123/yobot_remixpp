@@ -33,6 +33,7 @@ namespace yobot {
     using DB_Connection = sqlpp::sqlite3::pooled_connection;
     using Message = std::variant<GroupMsg, PrivateMsg>;
     using Action = std::function<std::string(const Message&)>;
+    using GroupAction = std::function<std::string(const GroupMsg&)>;
     using RegexAction = std::pair<const std::regex&, const Action&>;
     using RegexActionVector = std::vector<RegexAction>;
     using GroupMutexMap = tbb::concurrent_unordered_map<std::uint64_t, coro::mutex>;
@@ -653,13 +654,9 @@ namespace yobot {
                 return message;
             }
 
-            inline std::string showProgess(const std::uint64_t groud_id)
+            inline std::string showProgess(const GroupMsg& msg)
             {
-                if (auto group = Group(groud_id))
-                {
-                    return toText(group.getStatus());
-                }
-                return Group404ErrorResponse;
+                return toText(Group(msg.group_id).getStatus());
             }
 
             bool isHPListLegal(json::array_t& thisHPList, json::array_t& nextHPList, bool isOverlap)
@@ -785,9 +782,9 @@ namespace yobot {
                 return false;
             }
 
-            void resetProgess(const std::uint64_t group_id)
+            void resetProgess(const GroupMsg& msg)
             {
-                auto group = detail::Group(group_id);
+                auto group = detail::Group(msg.group_id);
                 auto gameServer = group.getGameServer();
                 auto& globalConfig = std::get<2>(getInstance());
                 auto phase = getPhase(1, gameServer);
@@ -802,7 +799,7 @@ namespace yobot {
                 return s.thisLapHPList[bossNum] != 0 || s.nextLapHPList[bossNum] != 0;
             }
 
-            inline std::string getApplicationNum(const status& s, const std::uint64_t user_id)
+            inline std::string getApplicationBossNum(const status& s, const std::uint64_t user_id)
             {
                 for (auto it = s.challengerList.begin(); it != s.challengerList.end(); it++)
                 {
@@ -816,7 +813,7 @@ namespace yobot {
 
             inline bool isApplied(const status& s, const std::uint64_t user_id)
             {
-                return !getApplicationNum(s, user_id).empty();
+                return !getApplicationBossNum(s, user_id).empty();
             }
 
             bool applyForChallenge(const GroupMsg& msg)
@@ -855,7 +852,7 @@ namespace yobot {
             {
                 auto group = Group(msg.group_id);
                 auto s = group.getStatus();
-                auto bossNum = getApplicationNum(s, msg.user_id);
+                auto bossNum = getApplicationBossNum(s, msg.user_id);
                 if (!bossNum.empty())
                 {
                     group.removeChallenger(bossNum, msg.user_id);
@@ -863,94 +860,89 @@ namespace yobot {
                 }
                 return false;
             }
+
+            std::string reportChallenge(const GroupMsg& msg)
+            {
+                auto group = Group(msg.group_id);
+                auto s = group.getStatus();
+                auto bossNum = getApplicationBossNum(s, msg.user_id);
+                if (bossNum.empty())
+                {
+                    
+                }
+                return {};
+            }
+        }
+
+        inline Action groupAction(GroupAction act)
+        {
+            return [](const Message& msg) {
+                return std::visit([&](auto&& x) -> std::string {
+                    if constexpr (std::is_convertible_v<decltype(x), GroupMsg>)
+                    {
+                        return !detail::Group(x.group_id)
+                            ? Group404ErrorResponse
+                            : act(x);
+                    }
+                    return {};
+                }, msg);
+            };
         }
 
         inline RegexAction showProgress()
         {
             static const std::regex rgx("进度");
-			static const Action act = [](const Message& msg) {
-                return std::visit([](auto&& x) -> std::string {
-                    if constexpr (std::is_convertible_v<decltype(x), GroupMsg>)
-                    {
-                        return detail::showProgess(x.group_id);
-                    }
-                    return {};
-                }, msg);
-		    };
+            static const Action act = groupAction(detail::showProgess);
             return { rgx,act };
         }
 
         inline RegexAction setProgress()
         {
             static const std::regex rgx(R"(^(设置|调整|修改|变更|更新|改变)进度.*)");
-            static const Action act = [](const Message& msg) -> std::string {
-				return std::visit([](auto&& x) -> std::string {
-					if constexpr (std::is_convertible_v<decltype(x), GroupMsg>)
-                    {
-                        return !detail::Group(x.group_id)
-                            ? Group404ErrorResponse 
-                            : detail::setProgress(x) 
-                                ? "进度已修改：\n" + detail::showProgess(x.group_id) 
-                                : "格式错误";
-                    }
-                    return {};
-                }, msg);
-            };
+            static const Action act = groupAction([](const GroupMsg& msg) {
+                return detail::setProgress(msg)
+                    ? "进度已修改：\n" + detail::showProgess(msg)
+                    : "格式错误";
+            });
             return { rgx,act };
         }
 
         inline RegexAction resetProgress()
         {
             static const std::regex rgx("重置进度");
-            static const Action act = [](const Message& msg) -> std::string {
-                return std::visit([](auto&& x) -> std::string {
-                    if constexpr (std::is_convertible_v<decltype(x), GroupMsg>)
-                    {
-                        return !detail::Group(x.group_id)
-                            ? Group404ErrorResponse
-                            : (detail::resetProgess(x.group_id), "进度已重置：\n" + detail::showProgess(x.group_id));
-                    }
-                    return {};
-                }, msg);
-            };
+            static const Action act = groupAction([](const GroupMsg& msg) {
+                detail::resetProgess(msg);
+                return "进度已重置：\n" + detail::showProgess(msg);
+            });
             return { rgx,act };
         }
 
         inline RegexAction applyForChallenge()
         {
             static const std::regex rgx("^申请(出|补|出补)刀.*");
-            static const Action act = [](const Message& msg) -> std::string {
-                return std::visit([](auto&& x) -> std::string {
-                    if constexpr (std::is_convertible_v<decltype(x), GroupMsg>)
-                    {
-                        return !detail::Group(x.group_id)
-                            ? Group404ErrorResponse
-                            : detail::applyForChallenge(x) 
-                                ? "申请成功：\n" + detail::showProgess(x.group_id) 
-                                : "申请失败，格式或状态错误";
-                    }
-                    return {};
-                }, msg);
-            };
+            static const Action act = groupAction([](const GroupMsg& msg) {
+                return detail::applyForChallenge(msg)
+                    ? "申请成功：\n" + detail::showProgess(msg)
+                    : "申请失败，格式或状态错误";
+            });
             return { rgx, act };
         }
 
         inline RegexAction cancelApplyForChallenge()
         {
-            static const std::regex rgx("取消申请");
-            static const Action act = [](const Message& msg) -> std::string {
-                return std::visit([](auto&& x) -> std::string {
-                    if constexpr (std::is_convertible_v<decltype(x), GroupMsg>)
-                    {
-                        return !detail::Group(x.group_id)
-                            ? Group404ErrorResponse
-                            : detail::cancelApplyForChallenge(x)
-                                ? "取消申请成功：\n" + detail::showProgess(x.group_id)
-                                : "没有申请出刀";
-                    }
-                    return {};
-                }, msg);
-            };
+            static const std::regex rgx("^(取消|撤销)申请");
+            static const Action act = groupAction([](const GroupMsg& msg) {
+                return detail::cancelApplyForChallenge(msg)
+                    ? "取消申请成功：\n" + detail::showProgess(msg)
+                    : "没有申请记录";
+            });
+            return { rgx, act };
+        }
+
+        inline RegexAction reportChallenge()
+        {
+            static const std::regex rgx("^(报|尾|报尾)刀.*");
+            static const Action act = groupAction(detail::reportChallenge);
             return { rgx, act };
         }
     }
@@ -981,7 +973,7 @@ namespace yobot {
         return g_instance;
     }
 
-    inline coro::task<> groupAction(twobot::ApiSet apiSet, GroupMsg msg, Action action)
+    inline coro::task<> processGroupMsgAsync(twobot::ApiSet apiSet, GroupMsg msg, Action action)
     {
         auto& groupMutexMap = std::get<4>(yobot::getInstance());
         auto response = std::string{};
@@ -995,7 +987,7 @@ namespace yobot {
         }
     }
 
-    inline coro::task<> privateAction(twobot::ApiSet apiSet, PrivateMsg msg, Action action)
+    inline coro::task<> processPrivateMsgAsync(twobot::ApiSet apiSet, PrivateMsg msg, Action action)
     {
         auto response = action(msg);
         if (!response.empty())
@@ -1017,11 +1009,11 @@ namespace yobot {
                     auto apiSet = std::get<0>(yobot::getInstance())->getApiSet(x.self_id);
                     if constexpr (std::is_convertible_v<decltype(x), GroupMsg>)
                     {
-                        return groupAction(apiSet, x, action);
+                        return processGroupMsgAsync(apiSet, x, action);
                     }
                     if constexpr (std::is_convertible_v<decltype(x), PrivateMsg>)
                     {
-                        return privateAction(apiSet, x, action);
+                        return processPrivateMsgAsync(apiSet, x, action);
                     }
                 }, msg);
             }
