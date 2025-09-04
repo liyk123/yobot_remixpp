@@ -334,7 +334,17 @@ namespace yobot {
                 static const json zeroHPList = { {"1", 0}, { "2",0 }, { "3",0 }, { "4",0 }, { "5",0 } };
                 auto strI = std::to_string(challenge.bossNum);
                 s.challengerList[strI].erase(std::to_string(challenge.userId));
-                s.thisLapHPList[strI] = challenge.bossHP;
+                if (s.nextLapHPList[strI] != 0)
+                {
+                    if (s.thisLapHPList[strI] != 0)
+                    {
+                        s.thisLapHPList[strI] = challenge.bossHP;
+                    }
+                    else
+                    {
+                        s.nextLapHPList[strI] = challenge.bossHP;
+                    }
+                }
                 if (challenge.damage == 0)
                 {
                     return;
@@ -868,7 +878,13 @@ namespace yobot {
                 auto bossNum = getApplicationBossNum(s, msg.user_id);
                 if (bossNum.empty())
                 {
-                    
+                    group.pushChallenge({
+                        .userId = msg.user_id,
+                        .time = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()),
+                        .lap = (int)s.lap,
+                        .bossNum = std::atoi(bossNum.c_str()),
+                        .bossHP
+                    });
                 }
                 return {};
             }
