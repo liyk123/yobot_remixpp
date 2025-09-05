@@ -65,6 +65,15 @@ namespace yobot {
         }
     }
 
+    namespace tools {
+        inline std::smatch regexSearch(const std::regex& parten, const std::string& rawStr)
+        {
+            std::smatch matches;
+            std::regex_search(rawStr, matches, parten);
+            return matches;
+        }
+    }
+
     static auto InitConfig() noexcept
     {
 #ifdef _WIN32
@@ -333,7 +342,6 @@ namespace yobot {
             {
                 static const json zeroHPList = { {"1", 0}, { "2",0 }, { "3",0 }, { "4",0 }, { "5",0 } };
                 auto strI = std::to_string(challenge.bossNum);
-                s.challengerList[strI].erase(std::to_string(challenge.userId));
                 if (s.nextLapHPList[strI] != 0)
                 {
                     if (s.thisLapHPList[strI] != 0)
@@ -379,12 +387,6 @@ namespace yobot {
             {
                 static const json zeroHPList = { {"1", 0}, { "2",0 }, { "3",0 }, { "4",0 }, { "5",0 } };
                 auto strI = std::to_string(challenge.bossNum);
-                s.challengerList[strI][std::to_string(challenge.userId)] = ChallengerDetail{
-                    .is_continue = challenge.isContinue,
-                    .behalf = challenge.behafId,
-                    .tree = false,
-                    .msg = challenge.message
-                };
                 if (challenge.bossHP == 0) 
                 {
                     auto thisPhase = getPhase(s.lap, s.gameServer);
@@ -638,8 +640,6 @@ namespace yobot {
                 data::ClanChallenge m_clanChallenge;
             };
 
-
-
             std::string toText(const status& status)
             {
                 auto& globalConfig = std::get<2>(getInstance());
@@ -762,10 +762,10 @@ namespace yobot {
             {
                 constexpr auto partenStr = R"(\[\s*(\d+),\s*([wWkK]|万|千),\s*(\[\s*\d+(?:,\s*\d+){4}\s*\]),\s*(\[\s*\d+(?:,\s*\d+){4}\s*\])\s*\]$)";
                 static const std::regex parten(partenStr);
-                std::smatch matches;
                 try
                 {
-                    if (std::regex_search(msg.raw_message, matches, parten))
+                    std::smatch matches = tools::regexSearch(parten, msg.raw_message);
+                    if (!matches.empty())
                     {
                         int lap = std::atoi(matches[1].str().c_str());
                         int unit = 10000;
@@ -828,12 +828,12 @@ namespace yobot {
 
             bool applyForChallenge(const GroupMsg& msg)
             {
-                constexpr auto partenStr = R"((\d)\s*(:|：|\s)?\s*(\S*))";
+                constexpr auto partenStr = R"(([1-5])\s*(:|：|\s)?\s*(\S*)$)";
                 static const std::regex parten(partenStr);
-                std::smatch matches;
-                try 
+                try
                 {
-                    if (std::regex_search(msg.raw_message, matches, parten))
+                    std::smatch matches = tools::regexSearch(parten, msg.raw_message);
+                    if (!matches.empty())
                     {
                         auto bossNum = matches[1].str();
                         auto group = Group(msg.group_id);
@@ -871,28 +871,99 @@ namespace yobot {
                 return false;
             }
 
-            std::string reportChallenge(const GroupMsg& msg)
+            inline int toUnit(const std::string& unitStr)
+            {
+                static const std::regex partenUnitK("[kK]|千");
+                static const std::regex partenUnitW("[wW]|万");
+                int unit = 1;
+                if (std::regex_match(unitStr, partenUnitK))
+                {
+                    unit = 1000;
+                }
+                else if (std::regex_match(unitStr, partenUnitW))
+                {
+                    unit = 10000;
+                }
+                return unit;
+            }
+
+            inline std::string reportKilled(const GroupMsg& msg, const std::smatch& matches)
+            {
+                return {};
+            }
+
+            inline std::string reportAlive(const GroupMsg& msg, const std::smatch& matches)
             {
                 auto group = Group(msg.group_id);
                 auto s = group.getStatus();
-                auto bossNum = getApplicationBossNum(s, msg.user_id);
-                if (bossNum.empty())
+                auto applyNum = getApplicationBossNum(s, msg.user_id);
+                auto bossNum = applyNum;
+                if (applyNum.empty() && (matches[1].length() == 0 || matches[2].length() == 0))
                 {
-                    group.pushChallenge({
-                        .userId = msg.user_id,
-                        .time = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()),
-                        .lap = (int)s.lap,
-                        .bossNum = std::atoi(bossNum.c_str()),
-                        .bossHP
-                    });
+                    return "未申请且没有指定boss";
                 }
+                int unit = toUnit(matches[4]);
+                auto damageStr = matches[3].str();
+                if (matches[2].length() == 0)
+                {
+                    damageStr = matches[1].str() + damageStr;
+                }
+                else
+                {
+                    if (matches[1].length() != 0)
+                    {
+                        bossNum = matches[1];
+                    }
+                }
+                std::int64_t damage = std::atoll(damageStr.c_str()) * unit;
+                auto& thisBossHP = s.thisLapHPList[bossNum];
+                if (thisBossHP != 0)
+                {
+                    if (thisBossHP <= damage)
+                    {
+                        return "伤害超出剩余血量，请使用“尾刀”指令";
+                    }
+                    thisBossHP = thisBossHP - damage;
+                }
+                else
+                {
+
+                }
+                group.pushChallenge({
+                    .userId = msg.user_id,
+                    .time = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()),
+                    .lap = (int)s.lap,
+                    .bossNum = std::atoi(applyNum.c_str()),
+                    .bossHP = 0
+                });
                 return {};
+            }
+
+            std::string reportChallenge(const GroupMsg& msg)
+            {
+                constexpr auto partenStr = R"(([1-5])?\s*(\s)?\s*(\d+)?([wWkK]|万|千)?$)";
+                static const std::regex parten(partenStr);
+                try
+                {
+                    auto matches = tools::regexSearch(parten, msg.raw_message);
+                    if (!matches.empty())
+                    {
+                        return msg.raw_message.find("尾") != std::string::npos
+                            ? reportKilled(msg, matches)
+                            : reportAlive(msg, matches);
+                    }
+                }
+                catch (std::exception e)
+                {
+                    std::cerr << e.what() << std::endl;
+                }
+                return "格式错误";
             }
         }
 
         inline Action groupAction(GroupAction act)
         {
-            return [](const Message& msg) {
+            return [&](const Message& msg) {
                 return std::visit([&](auto&& x) -> std::string {
                     if constexpr (std::is_convertible_v<decltype(x), GroupMsg>)
                     {
@@ -957,7 +1028,7 @@ namespace yobot {
 
         inline RegexAction reportChallenge()
         {
-            static const std::regex rgx("^(报|尾|报尾)刀.*");
+            static const std::regex rgx(R"(^(报|尾|报尾|补|补尾)刀.*)");
             static const Action act = groupAction(detail::reportChallenge);
             return { rgx, act };
         }
@@ -1059,15 +1130,16 @@ namespace yobot {
 
 void test()
 {
-    constexpr auto partenStr = R"((\d)\s*(:|：|\s)?\s*(\S*))";
-    static const std::regex parten(partenStr);
-    std::smatch matches;
-    std::string str = "申请出刀1\naaaaa";
+    constexpr auto partenStr = R"(([1-5])?$)";
+    std::string str = "尾刀21";
     try
     {
-        if (std::regex_search(str, matches, parten))
+        auto matches = yobot::tools::regexSearch(std::regex(partenStr), str);
+        if (!matches.empty())
         {
-            std::cout << matches[1] << matches[2]<< matches[3] << std::endl;
+            std::cout << matches[1] 
+                //<< "," << matches[2] << "," << matches[3] << "," << matches[4] 
+                << std::endl;
         }
     }
     catch (std::exception e)
@@ -1079,8 +1151,8 @@ void test()
 int main(int argc, char** args)
 {
 	static volatile int MI_VERSION = mi_version();
-    yobot::initialize();
-    yobot::start();
-    //test();
+    //yobot::initialize();
+    //yobot::start();
+    test();
     return 0;
 }
