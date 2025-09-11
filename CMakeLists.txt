@@ -13,10 +13,19 @@ set(PROJECT_NAME "yobot_remixpp")
 project (${PROJECT_NAME})
 
 set(FILE_LIST 
-	"main.cpp"
 	"yobotdata_new.h"
 	"default_config.h"
 	"yobotdata_new.sql.h"
+    "yobot.h"
+    "yobot.cpp"
+    "yobot_typedef.h"
+    "yobot_system.h"
+    "yobot_system.cpp"
+    "yobot_clanbattle.h"
+    "yobot_clanbattle.cpp"
+    "yobot_clanbatte_group.h"
+    "yobot_clanbatte_group.cpp"
+    "main.cpp"
 )
 
 find_package(spdlog CONFIG REQUIRED)
