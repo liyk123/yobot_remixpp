@@ -13,7 +13,7 @@ constexpr auto ConfigName = "yobot_config.json";
 constexpr auto IconDir = "icon";
 
 namespace yobot {
-    static auto InitConfig() noexcept
+    inline auto InitConfig() noexcept
     {
 #ifdef _WIN32
         ::system("chcp 65001 && cls");
@@ -39,7 +39,7 @@ namespace yobot {
         return std::make_tuple(botConfig, dbConfig, globalConfig);
     }
 
-    static std::shared_ptr<yobot::DB_Pool> InitDatabase(const std::shared_ptr<yobot::DB_Config>& dbConfig) noexcept
+    inline std::shared_ptr<yobot::DB_Pool> InitDatabase(const std::shared_ptr<yobot::DB_Config>& dbConfig) noexcept
     {
         auto dbPool = std::make_shared<yobot::DB_Pool>(dbConfig, 2);
         auto db = dbPool->get();
@@ -57,7 +57,7 @@ namespace yobot {
         return dbPool;
     }
 
-    static Instance construct()
+    inline Instance construct()
     {
         auto&& [botConfig, dbConfig, globalConfig] = InitConfig();
         auto dbPool = InitDatabase(dbConfig);
