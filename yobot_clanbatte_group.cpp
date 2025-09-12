@@ -226,6 +226,10 @@ namespace yobot {
 					.from(challengeJoinGroup)
 					.where(m_clanChallenge.cid == maxCid)
 				);
+				if (raws.empty())
+				{
+					return;
+				}
 				Challenge chal;
 				for (auto&& raw : raws)
 				{
