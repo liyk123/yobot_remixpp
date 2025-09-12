@@ -138,7 +138,7 @@ namespace yobot {
         onebotIO->onEvent<GroupMsg>(processMessageAysnc);
         onebotIO->onEvent<PrivateMsg>(processMessageAysnc);
         onebotIO->onEvent<ConnectEvent>([](const ConnectEvent& msg) -> coro::task<> {
-            std::cout << "websocketÒÑÁ¬½Ó£¡ID: " << msg.self_id << std::endl;
+            std::cout << "websocket已连接! ID: " << msg.self_id << std::endl;
             co_return;
             });
     }
