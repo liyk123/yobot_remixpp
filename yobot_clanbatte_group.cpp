@@ -1,37 +1,14 @@
 #include "yobot.h"
 #include "yobot_clanbatte_group.h"
+#include "yobot_clanbattle_tools.h"
 
 namespace yobot {
 	namespace clanbattle {
 		namespace detail {
+			using tools::adaptHPList;
+			using tools::getPhase;
+
 			NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(ChallengerDetail, is_continue, behalf, tree, msg);
-
-			std::int8_t getPhase(const std::int64_t lap, const std::string& gameServer)
-			{
-				char ret = 0;
-				auto& globalConfig = std::get<2>(getInstance());
-				auto& phaseList = globalConfig["lap_range"][gameServer].get_ref<const ordered_json::array_t&>();
-				for (auto&& range : phaseList)
-				{
-					if (lap >= range[0] && lap <= range[1])
-					{
-						break;
-					}
-					ret++;
-				}
-				return ret;
-			}
-
-			json adaptHPList(const std::ranges::range auto& list)
-			{
-				json ret = {};
-				for (int i = 0; i < 5; i++)
-				{
-					auto strI = std::to_string(i + 1);
-					ret[strI] = list[i];
-				}
-				return ret;
-			}
 
 			inline void recordChallenge(const Challenge& challenge, status& s)
 			{

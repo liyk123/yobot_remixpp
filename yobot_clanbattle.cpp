@@ -1,48 +1,16 @@
 #include "yobot.h"
 #include "yobot_clanbatte_group.h"
+#include "yobot_clanbattle_tools.h"
 
 constexpr auto TargetLocaleName = "zh_CN.UTF-8";
 constexpr auto Group404ErrorResponse = "未检测到数据，请先创建公会！";
 constexpr auto FormatErrorResponse = "格式错误";
 
 namespace yobot {
-    namespace tools {
-        inline std::smatch regexSearch(const std::regex& parten, const std::string& rawStr)
-        {
-            std::smatch matches;
-            std::regex_search(rawStr, matches, parten);
-            return matches;
-        }
-    }
-
     namespace clanbattle {
         namespace detail {
-            inline std::int8_t getPhase(const std::int64_t lap, const std::string& gameServer)
-            {
-                char ret = 0;
-                auto& globalConfig = std::get<2>(getInstance());
-                auto& phaseList = globalConfig["lap_range"][gameServer].get_ref<const ordered_json::array_t&>();
-                for (auto&& range : phaseList)
-                {
-                    if (lap >= range[0] && lap <= range[1])
-                    {
-                        break;
-                    }
-                    ret++;
-                }
-                return ret;
-            }
-
-            inline json adaptHPList(const std::ranges::range auto& list)
-            {
-                json ret = {};
-                for (int i = 0; i < 5; i++)
-                {
-                    auto strI = std::to_string(i + 1);
-                    ret[strI] = list[i];
-                }
-                return ret;
-            }
+            using tools::adaptHPList;
+            using tools::getPhase;
 
             std::string toText(const status& status)
             {
