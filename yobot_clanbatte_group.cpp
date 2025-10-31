@@ -59,31 +59,25 @@ namespace yobot {
 			{
 				static const json zeroHPList = { {"1", 0}, { "2",0 }, { "3",0 }, { "4",0 }, { "5",0 } };
 				auto strI = std::to_string(challenge.bossNum);
+				auto lastLap = s.lap == 1 ? s.lap : (s.lap - 1);
 				if (challenge.bossHP == 0)
 				{
 					auto thisPhase = getPhase(s.lap, s.gameServer);
-					auto lastPhase = getPhase(s.lap - 1, s.gameServer);
+					auto lastPhase = getPhase(lastLap, s.gameServer);
 					auto& globalConfig = std::get<2>(getInstance());
-					auto thisLapFullHPList = adaptHPList(globalConfig["boss_hp"][s.gameServer][thisPhase].get_ref<const ordered_json::array_t&>());
-					if (s.thisLapHPList == thisLapFullHPList)
+					auto thisPhaseFullHPList = adaptHPList(globalConfig["boss_hp"][s.gameServer][thisPhase].get_ref<const ordered_json::array_t&>());
+					if (s.thisLapHPList == thisPhaseFullHPList)
 					{
-						--s.lap;
+						s.lap = lastLap;
+						s.thisLapHPList = zeroHPList;
 						if (thisPhase != lastPhase)
 						{
-							if (thisPhase > 1)
-							{
-								auto lastLapFullHPList = adaptHPList(globalConfig["boss_hp"][s.gameServer][lastPhase].get_ref<const ordered_json::array_t&>());
-								s.nextLapHPList = zeroHPList;
-							}
+							s.nextLapHPList = zeroHPList;
 						}
-						else
-						{
-							s.nextLapHPList = thisLapFullHPList;
-						}
-						s.thisLapHPList = zeroHPList;
 					}
 				}
-				s.thisLapHPList[strI] = challenge.bossHP + challenge.damage;
+				auto& targetList = (s.nextLapHPList == zeroHPList || s.thisLapHPList[strI] != 0) ? s.thisLapHPList : s.nextLapHPList;
+				targetList[strI] = challenge.bossHP + challenge.damage;
 			}
 
 			inline std::time_t toDateOnly(const std::time_t time)
