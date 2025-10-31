@@ -5,4 +5,5 @@ namespace yobot {
     Instance& getInstance();
     void initialize();
     void start();
+    //void test();
 }

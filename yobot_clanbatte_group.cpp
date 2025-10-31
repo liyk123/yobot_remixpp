@@ -294,4 +294,26 @@ namespace yobot {
 			}
 		}
 	}
+
+	//void test()
+	//{
+	//	static const json zeroHPList = { {"1", 0}, { "2",0 }, { "3",0 }, { "4",0 }, { "5",0 } };
+	//	auto thisPhase = clanbattle::detail::getPhase(7, "cn");
+	//	auto& globalConfig = std::get<2>(getInstance());
+	//	auto thisPhaseFullHPList = clanbattle::tools::adaptHPList(globalConfig["boss_hp"]["cn"][thisPhase].get_ref<const ordered_json::array_t&>());
+	//	clanbattle::detail::status st{};
+	//	st.lap = 7;
+	//	st.gameServer = "cn";
+	//	st.thisLapHPList = thisPhaseFullHPList;
+	//	st.thisLapHPList["1"] = 0;
+	//	st.nextLapHPList = thisPhaseFullHPList;
+	//	st.nextLapHPList["1"] = 0;
+	//	clanbattle::detail::Challenge cl{};
+	//	cl.bossNum = 1;
+	//	cl.bossHP = 0;
+	//	cl.damage = 500;
+	//	cl.lap = 8;
+	//	clanbattle::detail::revokeChallenge(cl, st);
+	//	std::cout << st.lap << '\n' << st.thisLapHPList << '\n' << st.nextLapHPList << std::endl;
+	//}
 }

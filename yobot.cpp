@@ -24,6 +24,7 @@ namespace yobot {
         std::locale::global(std::locale(TargetLocaleName));
         std::locale::global(std::locale(C_LocaleName, std::locale::numeric));
         auto dbConfig = std::make_shared<yobot::DB_Config>(DB_Name, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE);
+        //dbConfig->debug = true;
         if (!std::filesystem::exists(ConfigName) || std::filesystem::file_size(ConfigName) == 0)
         {
             std::ofstream(ConfigName) << DEFAULT_CONFIG;
@@ -140,7 +141,7 @@ namespace yobot {
         onebotIO->onEvent<ConnectEvent>([](const ConnectEvent& msg) -> coro::task<> {
             std::cout << "websocket已连接! ID: " << msg.self_id << std::endl;
             co_return;
-            });
+        });
     }
 
     void start()
