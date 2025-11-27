@@ -207,18 +207,18 @@ namespace yobot {
 			void Group::popChallenge()
 			{
 				auto db = m_pool->get();
-				auto challengeJoinGroup =
-					m_clanChallenge
-					.left_outer_join(m_clanGroup)
-					.on(m_clanChallenge.bid == m_clanGroup.battleId);
+				auto bid =
+					select(m_clanGroup.battleId)
+					.from(m_clanGroup)
+					.where(m_clanGroup.groupId == m_groupID);
 				auto maxCid =
 					select(max(m_clanChallenge.cid))
 					.from(m_clanChallenge)
 					.where(m_clanChallenge.gid == m_groupID);
 				auto raws = db(
 					select(all_of(m_clanChallenge))
-					.from(challengeJoinGroup)
-					.where(m_clanChallenge.cid == maxCid)
+					.from(m_clanChallenge)
+					.where(m_clanChallenge.cid == maxCid and m_clanChallenge.bid == bid)
 				);
 				if (raws.empty())
 				{
