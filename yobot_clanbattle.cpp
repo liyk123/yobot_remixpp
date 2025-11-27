@@ -15,14 +15,14 @@ namespace yobot {
             std::string toText(const status& status)
             {
                 auto& globalConfig = std::get<2>(getInstance());
-                auto& [lap, gameServer, subList, chalList, thisHPList, nextHPList] = status;
+                auto& [lap, gameServer, chalList, subList, thisHPList, nextHPList] = status;
                 auto phase = getPhase(lap, gameServer);
                 std::string message = std::format("现在是{}阶段，第{}周目：", (char)(phase + 'A'), lap);
                 auto& lapHPList = globalConfig["boss_hp"][gameServer][phase].get_ref<const ordered_json::array_t&>();
                 for (size_t i = 1; i <= 5; i++)
                 {
                     auto strI = std::to_string(i);
-                    bool chanllenging = !chalList.is_discarded() && !chalList[strI].empty();
+                    bool chanllenging = !chalList.is_discarded() && chalList.contains(strI) && !chalList[strI].empty();
                     auto& HPList = (thisHPList[strI] == 0 ? nextHPList : thisHPList);
                     auto HP = HPList[strI].get<std::int64_t>();
                     auto fullHP = lapHPList[i - 1].get<std::int64_t>();
