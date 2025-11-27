@@ -359,7 +359,7 @@ namespace yobot {
 
             std::string reportChallenge(const GroupMsg& msg)
             {
-                constexpr auto partenStr = R"(([1-5])?\s*(\s)?\s*(\d+)?([wWkK]|万|千)?$)";
+                constexpr auto partenStr = R"(([1-5])?(\s*)?(\d+)?([wWkK]|万|千)?$)";
                 static const std::regex parten(partenStr);
                 try
                 {
