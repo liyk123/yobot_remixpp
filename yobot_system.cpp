@@ -28,7 +28,7 @@ namespace yobot {
             {
                 return std::visit([](auto&& x) {
                     return isSuperAdmin(x.user_id);
-                    }, msg);
+                }, msg);
             }
 
             inline void fetchBossData(BoosData& bossData, tbb::concurrent_unordered_set<json::number_integer_t>& idSet)
