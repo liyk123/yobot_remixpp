@@ -284,7 +284,8 @@ namespace yobot {
 					.from(m_clanGroup)
 					.where(m_clanGroup.groupId == m_groupID)
 				);
-				auto list = raw.empty() ? json{} : json::parse(raw.begin()->challengingMemberList.value());
+				auto list = raw.empty() ? json{} : json::parse(raw.begin()->challengingMemberList.value(), nullptr, false);
+				list = list.is_discarded() ? json{} : list;
 				func(list);
 				db(
 					update(m_clanGroup)
