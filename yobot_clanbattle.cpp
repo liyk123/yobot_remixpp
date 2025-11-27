@@ -30,8 +30,10 @@ namespace yobot {
                     percent = ((percent == 0) ? (HP != 0) : percent);
                     auto rate = percent / 10;
                     rate = ((rate == 0) ? (HP != 0) : rate);
-                    auto chalStr = (chanllenging ? "有" : "无");
-                    message += std::format("\n{}.【{:■<{}}{:□<{}}】{:02}% {}人", i, "", rate, "", 10 - rate, percent, chalStr);
+                    auto colorStr = (thisHPList[strI] == 0 ? "🔵" : "🔴");
+                    auto chalStr = (chanllenging ? "🈶" : "🈚️");
+                    auto warnStr = (rate < 4 ? "⚠️" : "🟢");
+                    message += std::format("\n{}. {:█<{}}{:░<{}} {}{}{}", i, "", rate, "", 10 - rate, colorStr, chalStr, warnStr);
                 }
                 return message;
             }
