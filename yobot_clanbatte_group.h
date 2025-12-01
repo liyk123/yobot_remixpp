@@ -52,6 +52,10 @@ namespace yobot {
             public:
                 Group* create();
 
+                void addMember(const std::uint64_t userId);
+
+                void deleteMemeber(const std::uint64_t userId);
+
                 status getStatus();
 
                 void setStatus(const std::int64_t lap, const json& thisLapBossHealth, const json& nextLapBossHealth);
@@ -78,6 +82,7 @@ namespace yobot {
                 std::uint64_t m_groupID;
                 data::ClanGroup m_clanGroup;
                 data::ClanChallenge m_clanChallenge;
+                data::ClanMember m_clanMember;
             };
 		}
 	}

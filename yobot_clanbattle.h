@@ -3,6 +3,7 @@
 namespace yobot {
     namespace clanbattle {
         RegexAction createClan();
+        RegexAction joinClan();
         RegexAction showProgress();
         RegexAction setProgress();
         RegexAction resetProgress();

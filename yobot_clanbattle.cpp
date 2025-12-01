@@ -425,6 +425,16 @@ namespace yobot {
             return { rgx, act };
         }
 
+        RegexAction joinClan()
+        {
+            static const std::regex rgx("加入公会");
+            static const Action act = groupAction([](const GroupMsg& msg) {
+                detail::Group(msg.group_id).addMember(msg.user_id);
+                return "已加入公会";
+            });
+            return { rgx,act };
+        }
+
         RegexAction showProgress()
         {
             static const std::regex rgx("进度");

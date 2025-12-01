@@ -135,6 +135,26 @@ namespace yobot {
 				return this;
 			}
 
+			void Group::addMember(const std::uint64_t userId)
+			{
+                m_pool->get()(
+                    insert_into(m_clanMember)
+                    .set(
+                        m_clanMember.groupId = m_groupID,
+                        m_clanMember.qqid = userId,
+						m_clanMember.role = 0
+                    )
+                );
+			}
+
+			void Group::deleteMemeber(const std::uint64_t userId)
+			{
+				m_pool->get()(
+					remove_from(m_clanMember)
+					.where(m_clanMember.groupId == m_groupID and m_clanMember.qqid == userId)
+				);
+			}
+
 			status Group::getStatus()
 			{
 				auto db = m_pool->get();
