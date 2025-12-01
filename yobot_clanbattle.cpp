@@ -401,6 +401,30 @@ namespace yobot {
             };
         }
 
+        RegexAction createClan()
+        {
+            static const std::regex rgx("创建公会");
+            static const Action act = [](const yobot::Message& msg) {
+                return std::visit([=](auto&& x) -> std::string {
+                    if constexpr (std::is_convertible_v<decltype(x), GroupMsg>)
+                    {
+                        auto group = detail::Group(x.group_id);
+                        if (group)
+                        {
+                            return "公会数据已存在";
+                        }
+                        if (*group.create())
+                        {
+                            detail::resetProgess(x);
+                            return "创建完成, 请使用“加入公会”的指令进入公会";
+                        }
+                    }
+                    return {};
+                }, msg);
+            };
+            return { rgx, act };
+        }
+
         RegexAction showProgress()
         {
             static const std::regex rgx("进度");

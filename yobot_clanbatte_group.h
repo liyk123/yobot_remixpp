@@ -50,6 +50,8 @@ namespace yobot {
                 explicit operator bool() const;
 
             public:
+                Group* create();
+
                 status getStatus();
 
                 void setStatus(const std::int64_t lap, const json& thisLapBossHealth, const json& nextLapBossHealth);

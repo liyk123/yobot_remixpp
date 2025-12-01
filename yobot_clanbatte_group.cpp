@@ -113,6 +113,28 @@ namespace yobot {
 				return r.empty() ? false : !r.begin()->deleted.value();
 			}
 
+			Group* Group::create()
+			{
+				m_pool->get()(
+					insert_into(m_clanGroup)
+					.set(
+						m_clanGroup.groupId = m_groupID,
+						m_clanGroup.battleId = 0,
+						m_clanGroup.deleted = 0,
+						m_clanGroup.gameServer = "cn",
+						m_clanGroup.bossCycle = 1,
+						m_clanGroup.nowCycleBossHealth = "",
+						m_clanGroup.nextCycleBossHealth = "",
+						m_clanGroup.apikey = "",
+						m_clanGroup.notification = 0,
+						m_clanGroup.privacy = 0,
+						m_clanGroup.threshold = 0,
+						m_clanGroup.challengingStartTime = 0
+					)
+				);
+				return this;
+			}
+
 			status Group::getStatus()
 			{
 				auto db = m_pool->get();

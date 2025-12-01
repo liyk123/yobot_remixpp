@@ -68,6 +68,7 @@ namespace yobot {
             system::showVersion(),
             system::showStatistics(),
             system::updateData(),
+            clanbattle::createClan(),
             clanbattle::showProgress(),
             clanbattle::setProgress(),
             clanbattle::resetProgress(),

@@ -2,6 +2,7 @@
 #include "yobot_typedef.h"
 namespace yobot {
     namespace clanbattle {
+        RegexAction createClan();
         RegexAction showProgress();
         RegexAction setProgress();
         RegexAction resetProgress();
