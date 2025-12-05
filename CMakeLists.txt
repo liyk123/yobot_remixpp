@@ -34,6 +34,7 @@ find_package(spdlog CONFIG REQUIRED)
 find_package(Sqlpp11 CONFIG REQUIRED COMPONENTS SQLite3)
 find_package(TwoBot CONFIG REQUIRED)
 find_package(mimalloc CONFIG REQUIRED)
+find_package(SDL3 CONFIG REQUIRED)
 
 macro(get_git_hash _git_hash)
   find_package(Git QUIET)
@@ -91,6 +92,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     spdlog::spdlog_header_only 
     TwoBot::TwoBot 
     sqlpp11::sqlite3
+    SDL3::SDL3
 )
 
 set_property(TARGET ${PROJECT_NAME} PROPERTY CXX_STANDARD 20)
