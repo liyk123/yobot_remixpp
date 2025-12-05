@@ -28,6 +28,8 @@ set(FILE_LIST
     "yobot_clanbatte_group.cpp"
     "yobot_clanbattle_tools.h"
     "yobot_clanbattle_tools.cpp"
+    "yobot_painter.h" 
+    "yobot_painter.cpp"
 )
 
 find_package(spdlog CONFIG REQUIRED)

@@ -1,6 +1,7 @@
 #include <mimalloc-new-delete.h>
 #include <mimalloc-override.h>
 #include "yobot.h"
+//#include "yobot_painter.h"
 
 int main(int argc, char** args)
 {
@@ -8,5 +9,6 @@ int main(int argc, char** args)
     yobot::initialize();
     yobot::start();
     //yobot::test();
+    //yobot::painter::getInstance().draw();
     return 0;
 }
