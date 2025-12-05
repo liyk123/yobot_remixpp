@@ -92,7 +92,7 @@ namespace yobot {
         auto& groupMutexMap = std::get<4>(yobot::getInstance());
         auto response = std::string{};
         {
-            auto lock = co_await groupMutexMap[msg.group_id].scoped_lock();
+            volatile auto&& lock = co_await groupMutexMap[msg.group_id].scoped_lock();
             response = action(msg);
         }
         if (!response.empty())
