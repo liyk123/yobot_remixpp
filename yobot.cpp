@@ -10,7 +10,6 @@ constexpr auto TargetLocaleName = "zh_CN.UTF-8";
 constexpr auto C_LocaleName = "C";
 constexpr auto DB_Name = "yobotdata_new.db";
 constexpr auto ConfigName = "yobot_config.json";
-constexpr auto IconDir = "icon";
 
 namespace yobot {
     inline auto InitConfig() noexcept
@@ -63,7 +62,6 @@ namespace yobot {
         auto&& [botConfig, dbConfig, globalConfig] = InitConfig();
         auto dbPool = InitDatabase(dbConfig);
         auto onebotIO = twobot::BotInstance::createInstance(botConfig);
-        std::filesystem::create_directory(IconDir);
         RegexActionVector regexActionVec = {
             system::showVersion(),
             system::showStatistics(),

@@ -5,7 +5,6 @@
 
 constexpr auto VersionInfo = "Branch: " GIT_BRANCH "\nCommit: " GIT_VERSION "\nDate: " GIT_DATE;
 constexpr auto ConfigName = "yobot_config.json";
-constexpr auto IconDir = "icon";
 constexpr auto AuthorityErrorRespone = "权限错误";
 
 namespace yobot {
@@ -31,7 +30,7 @@ namespace yobot {
                 }, msg);
             }
 
-            inline void fetchBossData(BoosData& bossData, tbb::concurrent_unordered_set<json::number_integer_t>& idSet)
+            inline void fetchBossData(BoosData& bossData)
             {
                 auto&& [itArea, itBossHP, itLapRange, itBossId, itBossName] = bossData;
                 httplib::Client client("https://pcr.satroki.tech");
@@ -48,7 +47,6 @@ namespace yobot {
                         for (auto&& boss : (*ait)["bosses"])
                         {
                             auto id = boss["unitId"].get<json::number_integer_t>();
-                            idSet.insert(id);
                             itBossId.push_back(id);
                             itBossName.push_back(boss["name"]);
                         }
@@ -67,40 +65,17 @@ namespace yobot {
                 }
             }
 
-            inline void fetchBossIcon(tbb::concurrent_unordered_set<json::number_integer_t>::range_type range)
-            {
-                httplib::Client client("https://redive.estertion.win");
-                client.set_follow_location(true);
-                for (auto&& id : range)
-                {
-                    auto filename = std::to_string(id) + ".webp";
-                    auto filepath = std::filesystem::path(std::string(IconDir) + "/" + filename);
-                    if (!std::filesystem::exists(filepath))
-                    {
-                        auto result = client.Get("/icon/unit/" + filename);
-                        if (result && result->status == httplib::OK_200)
-                        {
-                            std::ofstream(filepath, std::ios::binary) << result->body;
-                        }
-                    }
-                }
-            }
-
             void updateBossData()
             {
                 static std::mutex mtUpdate;
                 std::lock_guard lock(mtUpdate);
-                std::vector<yobot::BoosData> vBossData = {
+                std::array<yobot::BoosData, 3> vBossData = { {
                     {yobot::area::cn, {}, {}, {}, {}},
                     {yobot::area::tw, {}, {}, {}, {}},
                     {yobot::area::jp, {}, {}, {}, {}}
-                };
-                tbb::concurrent_unordered_set<json::number_integer_t> idSet;
+                } };
                 tbb::parallel_for(0ULL, vBossData.size(), [&](std::size_t it) {
-                    fetchBossData(vBossData[it], idSet);
-                });
-                tbb::parallel_for(idSet.range(), [](auto&& range) {
-                    fetchBossIcon(range);
+                    fetchBossData(vBossData[it]);
                 });
                 ordered_json jbossData;
                 for (auto&& x : vBossData)
