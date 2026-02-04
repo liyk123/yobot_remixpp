@@ -1,3 +1,4 @@
+#include <httplib.h>
 #include "yobot.h"
 #include "yobot_clanbatte_group.h"
 #include "yobot_clanbattle_tools.h"
@@ -41,6 +42,32 @@ namespace yobot {
             inline std::string showProgess(const GroupMsg& msg)
             {
                 return toText(Group(msg.group_id).getStatus());
+            }
+
+            inline std::string toPicture(const status& status)
+            {
+                json data = json::object();
+                data.emplace("lap", status.lap);
+                auto&& hp = data.emplace("boss_hps", json::array_t{}).first;
+                auto&& flags = data.emplace("lap_flags", json::array_t{}).first;
+                for (size_t i = 1; i <= 5; i++)
+                {
+                    auto strI = std::to_string(i);
+                    auto isNext = status.thisLapHPList[strI] == 0;
+                    auto bossHP = (isNext ? status.nextLapHPList : status.thisLapHPList)[strI].get<json::number_integer_t>();
+                    auto isOverlap = getPhase(status.lap, status.gameServer) != getPhase(status.lap + 1, status.gameServer);
+                    hp->emplace_back(bossHP);
+                    flags->emplace_back(isNext && (bossHP != 0 || !isOverlap));
+                }
+                auto& globalConfig = std::get<2>(getInstance());
+                auto paintSvrUrl = globalConfig["paint_secheme_host_port"].get<std::string_view>();
+                auto rawUri = std::format("{}/progress?data={}", paintSvrUrl, data.dump());
+                return std::format("[CQ:image,file={}]", httplib::encode_uri(rawUri));
+            }
+
+            inline std::string showStatus(const GroupMsg& msg)
+            {
+                return toPicture(Group(msg.group_id).getStatus());
             }
 
             inline bool isFilledWithZero(json::array_t& HPList)
@@ -439,6 +466,13 @@ namespace yobot {
         {
             static const std::regex rgx("进度");
             static const Action act = groupAction(detail::showProgess);
+            return { rgx,act };
+        }
+
+        RegexAction showStatus()
+        {
+            static const std::regex rgx("状态");
+            static const Action act = groupAction(detail::showStatus);
             return { rgx,act };
         }
 
