@@ -47,18 +47,18 @@ namespace yobot {
                         for (auto&& boss : (*ait)["bosses"])
                         {
                             auto id = boss["unitId"].get<json::number_integer_t>();
-                            itBossId.push_back(id);
-                            itBossName.push_back(boss["name"]);
+                            itBossId.emplace_back(id);
+                            itBossName.emplace_back(boss["name"]);
                         }
                         for (; ait != phases.end(); ait++)
                         {
                             json::array_t bossHP;
                             for (auto&& boss : (*ait)["bosses"])
                             {
-                                bossHP.push_back(boss["hp"]);
+                                bossHP.emplace_back(boss["hp"]);
                             }
-                            itBossHP.push_back(bossHP);
-                            itLapRange.push_back(json::array({ (*ait)["lapFrom"], (*ait)["lapTo"] }));
+                            itBossHP.emplace_back(bossHP);
+                            itLapRange.emplace_back(json::array({ (*ait)["lapFrom"], (*ait)["lapTo"] }));
                         }
                         *(itLapRange.rbegin()->rbegin()) = 999;
                     }
