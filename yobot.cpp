@@ -113,8 +113,8 @@ namespace yobot {
         auto& regexActionVec = std::get<3>(yobot::getInstance());
         auto raw_message = std::visit([](auto&& x) { return x.raw_message; }, msg);
         auto ret = []() -> coro::task<> { co_return; }();
-        tbb::parallel_for(0ULL, regexActionVec.size(), [&](std::size_t it) {
-            auto&& [regex, action] = regexActionVec[it];
+        for (auto&& [regex, action] : regexActionVec)
+        {
             if (std::regex_match(raw_message, regex))
             {
                 ret = std::visit([&](auto&& x) -> coro::task<> {
@@ -129,7 +129,7 @@ namespace yobot {
                     }
                 }, msg);
             }
-        });
+        }
         return ret;
     }
 
