@@ -57,9 +57,8 @@ namespace yobot {
                     auto isNext = status.thisLapHPList[strI] == 0;
                     auto&& HPList = isNext ? status.nextLapHPList : status.thisLapHPList;
                     auto bossHP = HPList[strI].get<json::number_integer_t>();
-                    auto isOverlap = getPhase(status.lap, status.gameServer) != getPhase(status.lap + 1, status.gameServer);
                     hp->emplace_back(bossHP);
-                    flags->emplace_back(isNext && (bossHP != 0 || !isOverlap));
+                    flags->emplace_back(isNext);
                 }
                 auto& globalConfig = std::get<2>(getInstance());
                 auto paintSvrUrl = globalConfig["paint_secheme_host_port"].get<std::string_view>();
