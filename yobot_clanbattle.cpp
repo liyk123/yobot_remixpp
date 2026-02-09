@@ -6,6 +6,7 @@
 constexpr auto TargetLocaleName = "zh_CN.UTF-8";
 constexpr auto Group404ErrorResponse = "未检测到数据，请先创建公会！";
 constexpr auto FormatErrorResponse = "格式错误";
+constexpr std::string_view StrIArray[] = { "1","2","3","4","5" };
 
 namespace yobot {
     namespace clanbattle {
@@ -22,7 +23,7 @@ namespace yobot {
                 auto& lapHPList = globalConfig["boss_hp"][gameServer][phase].get_ref<const ordered_json::array_t&>();
                 for (size_t i = 1; i <= 5; i++)
                 {
-                    auto strI = std::to_string(i);
+                    auto strI = StrIArray[i - 1];
                     bool chanllenging = !chalList.is_discarded() && chalList.contains(strI) && !chalList[strI].empty();
                     auto& HPList = (thisHPList[strI] == 0 ? nextHPList : thisHPList);
                     auto HP = HPList[strI].get<std::int64_t>();
@@ -52,9 +53,10 @@ namespace yobot {
                 auto&& flags = data.emplace("lap_flags", json::array_t{}).first;
                 for (size_t i = 1; i <= 5; i++)
                 {
-                    auto strI = std::to_string(i);
+                    auto strI = StrIArray[i - 1];
                     auto isNext = status.thisLapHPList[strI] == 0;
-                    auto bossHP = (isNext ? status.nextLapHPList : status.thisLapHPList)[strI].get<json::number_integer_t>();
+                    auto&& HPList = isNext ? status.nextLapHPList : status.thisLapHPList;
+                    auto bossHP = HPList[strI].get<json::number_integer_t>();
                     auto isOverlap = getPhase(status.lap, status.gameServer) != getPhase(status.lap + 1, status.gameServer);
                     hp->emplace_back(bossHP);
                     flags->emplace_back(isNext && (bossHP != 0 || !isOverlap));
