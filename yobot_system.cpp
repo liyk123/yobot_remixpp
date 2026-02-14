@@ -74,7 +74,7 @@ namespace yobot {
                     {yobot::area::tw, {}, {}, {}, {}},
                     {yobot::area::jp, {}, {}, {}, {}}
                 } };
-                tbb::parallel_for(0ULL, vBossData.size(), [&](std::size_t it) {
+                tbb::parallel_for(std::size_t(0), vBossData.size(), [&](std::size_t it) {
                     fetchBossData(vBossData[it]);
                 });
                 ordered_json jbossData;

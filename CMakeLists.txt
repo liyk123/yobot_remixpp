@@ -32,7 +32,7 @@ set(FILE_LIST
 
 find_package(spdlog CONFIG REQUIRED)
 find_package(Sqlpp11 CONFIG REQUIRED COMPONENTS SQLite3)
-find_package(TwoBot CONFIG REQUIRED)
+find_package(twobot CONFIG REQUIRED)
 find_package(mimalloc CONFIG REQUIRED)
 
 macro(get_git_hash _git_hash)
@@ -89,7 +89,7 @@ add_executable(${PROJECT_NAME} ${FILE_LIST})
 target_link_libraries(${PROJECT_NAME} PRIVATE 
     $<IF:$<TARGET_EXISTS:mimalloc-static>,mimalloc-static,mimalloc> 
     spdlog::spdlog_header_only 
-    TwoBot::TwoBot 
+    twobot::twobot 
     sqlpp11::sqlite3
 )
 

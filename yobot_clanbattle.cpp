@@ -86,7 +86,7 @@ namespace yobot {
 
             inline void filterHP(json& hp, const int unit, const std::int64_t fullHP)
             {
-                hp = hp * unit;
+                hp = hp.get<json::number_integer_t>() * unit;
                 if (hp > fullHP)
                 {
                     hp = fullHP;

@@ -21,7 +21,7 @@ namespace yobot {
         std::setlocale(LC_ALL, TargetLocaleName);
         std::setlocale(LC_NUMERIC, C_LocaleName);
         std::locale::global(std::locale(TargetLocaleName));
-        std::locale::global(std::locale(C_LocaleName, std::locale::numeric));
+        std::locale::global(std::locale(std::locale(), C_LocaleName, std::locale::numeric));
         auto dbConfig = std::make_shared<yobot::DB_Config>(DB_Name, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE);
         //dbConfig->debug = true;
         if (!std::filesystem::exists(ConfigName) || std::filesystem::file_size(ConfigName) == 0)
