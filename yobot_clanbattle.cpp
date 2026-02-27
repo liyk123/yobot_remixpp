@@ -71,17 +71,9 @@ namespace yobot {
                 return toPicture(Group(msg.group_id).getStatus());
             }
 
-            inline bool isFilledWithZero(json::array_t& HPList)
+            inline bool isFilledWithZero(const json::array_t& HPList)
             {
-                int zeroCount = 0;
-                for (int i = 0; i < 5; i++)
-                {
-                    if (HPList[i] == 0)
-                    {
-                        zeroCount++;
-                    }
-                }
-                return zeroCount == 5;
+                return std::all_of(HPList.begin(), HPList.end(), [](auto&& x) { return x == 0; });
             }
 
             inline void filterHP(json& hp, const int unit, const std::int64_t fullHP)
@@ -199,11 +191,13 @@ namespace yobot {
 
             inline std::string getApplicationBossNum(const status& s, const std::uint64_t user_id)
             {
-                for (auto it = s.challengerList.begin(); it != s.challengerList.end(); it++)
+                const auto userId = std::to_string(user_id);
+
+                for (auto&& [bossNum, challengers] : s.challengerList.items())
                 {
-                    if (it.value().contains(std::to_string(user_id)))
+                    if (challengers.contains(userId))
                     {
-                        return it.key();
+                        return bossNum;
                     }
                 }
                 return {};
