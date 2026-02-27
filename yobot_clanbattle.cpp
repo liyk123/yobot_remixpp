@@ -21,13 +21,13 @@ namespace yobot {
                 auto phase = getPhase(lap, gameServer);
                 std::string message = std::format("现在是{}阶段，第{}周目：", (char)(phase + 'A'), lap);
                 auto& lapHPList = globalConfig["boss_hp"][gameServer][phase].get_ref<const ordered_json::array_t&>();
-                for (size_t i = 1; i <= 5; i++)
+                for (size_t i = 0; i < 5; i++)
                 {
-                    auto strI = StrIArray[i - 1];
+                    auto strI = StrIArray[i];
                     bool chanllenging = !chalList.is_discarded() && chalList.contains(strI) && !chalList[strI].empty();
                     auto& HPList = (thisHPList[strI] == 0 ? nextHPList : thisHPList);
                     auto HP = HPList[strI].get<std::int64_t>();
-                    auto fullHP = lapHPList[i - 1].get<std::int64_t>();
+                    auto fullHP = lapHPList[i].get<std::int64_t>();
                     auto percent = HP * 100 / fullHP;
                     percent = ((percent == 0) ? (HP != 0) : percent);
                     auto rate = percent / 10;
@@ -35,7 +35,7 @@ namespace yobot {
                     auto colorStr = (thisHPList[strI] == 0 ? "🔵" : "🔴");
                     auto chalStr = (chanllenging ? "🈶" : "🈚️");
                     auto warnStr = (rate < 4 ? "⚠️" : "🟢");
-                    message += std::format("\n{}. {:█<{}}{:░<{}} {}{}{}", i, "", rate, "", 10 - rate, colorStr, chalStr, warnStr);
+                    message += std::format("\n{}. {:█<{}}{:░<{}} {}{}{}", strI, "", rate, "", 10 - rate, colorStr, chalStr, warnStr);
                 }
                 return message;
             }

@@ -1,5 +1,7 @@
 #include "yobot.h"
 
+constexpr std::string_view StrIArray[] = { "1","2","3","4","5" };
+
 namespace yobot {
 	namespace clanbattle {
 		namespace tools {
@@ -24,8 +26,7 @@ namespace yobot {
 				json ret = {};
 				for (int i = 0; i < 5; i++)
 				{
-					auto strI = std::to_string(i + 1);
-					ret[strI] = list[i];
+					ret[StrIArray[i]] = list[i];
 				}
 				return ret;
 			}
