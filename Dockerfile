@@ -2,7 +2,7 @@
 # - Use CMake configure preset "Release" (preset sets binaryDir=${sourceDir}/build)
 # - Build the target yobot_remixpp and collect build-time shared libraries from /src/build
 # - Create non-root user 'appuser' in runtime image, chown runtime files to that user
-# - Expose TCP port 9444
+# - Expose TCP port 9222
 
 FROM python:3.13-trixie AS builder
 
@@ -69,7 +69,7 @@ ENV PATH=${CMAKE_INSTALL_PREFIX}/bin:$PATH
 WORKDIR /app
 
 # Expose the requested port
-EXPOSE 9444 
+EXPOSE 9222
 
 # Run as non-root
 USER appuser

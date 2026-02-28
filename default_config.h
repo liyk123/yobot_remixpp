@@ -1,7 +1,7 @@
 #pragma once
 #define DEFAULT_CONFIG R"({
     "host": "0.0.0.0",
-    "port": 9444,
+    "port": 9222,
     "access_token": "",
     "paint_secheme_host_port": "http://127.0.0.1:9540",
     "client_salt": null,
