@@ -1,7 +1,7 @@
 {
   "default-registry": {
     "kind": "git",
-    "baseline": "0782bf1b72bb5fba0e1539046765a202a70e25d7",
+    "baseline": "1d3d8c3151feb42bad7bf3a11715cf5687c6fb08",
     "repository": "https://github.com/liyk123/vcpkg",
     "reference": "pcrbotpp"
   },
