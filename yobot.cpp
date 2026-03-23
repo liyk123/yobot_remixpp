@@ -1,5 +1,6 @@
 #include <iostream>
 #include <fstream>
+#include <csignal>
 #include "yobot.h"
 #include "default_config.h"
 #include "yobotdata_new.sql.h"
@@ -145,11 +146,22 @@ namespace yobot {
         });
     }
 
+    static void onSignalReceived(int signal)
+    {
+        if (signal == SIGINT || signal == SIGTERM)
+        {
+            auto& onebotIO = std::get<0>(getInstance());
+            onebotIO->stop();
+        }
+    }
+
     void start()
     {
         auto& onebotIO = std::get<0>(getInstance());
         auto& globalConfig = std::get<2>(getInstance());
         std::cout << "Start listening:" << globalConfig["port"] << std::endl;
+        std::signal(SIGINT, onSignalReceived);
+        std::signal(SIGTERM, onSignalReceived);
         onebotIO->start();
     }
 }
