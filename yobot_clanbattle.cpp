@@ -14,7 +14,7 @@ namespace yobot {
             using tools::adaptHPList;
             using tools::getPhase;
 
-            std::string toText(const status& status)
+            static std::string toText(const status& status)
             {
                 auto& globalConfig = std::get<2>(getInstance());
                 auto& [lap, gameServer, chalList, subList, thisHPList, nextHPList] = status;
@@ -40,12 +40,12 @@ namespace yobot {
                 return message;
             }
 
-            inline std::string showProgess(const GroupMsg& msg)
+            static std::string showProgess(const GroupMsg& msg)
             {
                 return toText(Group(msg.group_id).getStatus());
             }
 
-            inline std::string toPicture(const status& status)
+            static std::string toPicture(const status& status)
             {
                 json data = json::object();
                 data.emplace("lap", status.lap);
@@ -66,17 +66,17 @@ namespace yobot {
                 return std::format("[CQ:image,file={}]", httplib::encode_uri(rawUri));
             }
 
-            inline std::string showStatus(const GroupMsg& msg)
+            static std::string showStatus(const GroupMsg& msg)
             {
                 return toPicture(Group(msg.group_id).getStatus());
             }
 
-            inline bool isFilledWithZero(const json::array_t& HPList)
+            static bool isFilledWithZero(const json::array_t& HPList)
             {
                 return std::all_of(HPList.begin(), HPList.end(), [](auto&& x) { return x == 0; });
             }
 
-            inline void filterHP(json& hp, const int unit, const std::int64_t fullHP)
+            static void filterHP(json& hp, const int unit, const std::int64_t fullHP)
             {
                 hp = hp.get<json::number_integer_t>() * unit;
                 if (hp > fullHP)
@@ -85,7 +85,7 @@ namespace yobot {
                 }
             }
 
-            void filterHPList(json::array_t& thisHPList, json::array_t& nextHPList, const ordered_json::array_t& lapHPList, const bool isOverlap, const int unit)
+            static void filterHPList(json::array_t& thisHPList, json::array_t& nextHPList, const ordered_json::array_t& lapHPList, const bool isOverlap, const int unit)
             {
                 for (int i = 0; i < 5; i++)
                 {
@@ -115,7 +115,7 @@ namespace yobot {
                 }
             }
 
-            bool checkAndFilterProgress(const std::string& gameServer, const int lap, const int unit, json::array_t& thisHPList, json::array_t& nextHPList)
+            static bool checkAndFilterProgress(const std::string& gameServer, const int lap, const int unit, json::array_t& thisHPList, json::array_t& nextHPList)
             {
                 if (lap < 1 || lap > 999)
                 {
@@ -138,7 +138,7 @@ namespace yobot {
                 return true;
             }
 
-            bool setProgress(const GroupMsg& msg)
+            static bool setProgress(const GroupMsg& msg)
             {
                 constexpr auto partenStr = R"(\[\s*(\d+),\s*([wWkK]|万|千),\s*(\[\s*\d+(?:,\s*\d+){4}\s*\]),\s*(\[\s*\d+(?:,\s*\d+){4}\s*\])\s*\]$)";
                 static const std::regex parten(partenStr);
@@ -172,7 +172,7 @@ namespace yobot {
                 return false;
             }
 
-            void resetProgess(const GroupMsg& msg)
+            static void resetProgess(const GroupMsg& msg)
             {
                 auto group = detail::Group(msg.group_id);
                 auto gameServer = group.getGameServer();
@@ -184,12 +184,12 @@ namespace yobot {
                 group.clearChallenge();
             }
 
-            inline bool isBossAlive(const status& s, const std::string& bossNum)
+            static bool isBossAlive(const status& s, const std::string& bossNum)
             {
                 return s.thisLapHPList[bossNum] != 0 || s.nextLapHPList[bossNum] != 0;
             }
 
-            inline std::string getApplicationBossNum(const status& s, const std::uint64_t user_id)
+            static std::string getApplicationBossNum(const status& s, const std::uint64_t user_id)
             {
                 const auto userId = std::to_string(user_id);
 
@@ -203,12 +203,12 @@ namespace yobot {
                 return {};
             }
 
-            inline bool isApplied(const status& s, const std::uint64_t user_id)
+            static bool isApplied(const status& s, const std::uint64_t user_id)
             {
                 return !getApplicationBossNum(s, user_id).empty();
             }
 
-            bool applyForChallenge(const GroupMsg& msg)
+            static bool applyForChallenge(const GroupMsg& msg)
             {
                 constexpr auto partenStr = R"(([1-5])\s*(:|：|\s)?\s*(\S*)$)";
                 static const std::regex parten(partenStr);
@@ -240,7 +240,7 @@ namespace yobot {
                 return false;
             }
 
-            bool cancelApplyForChallenge(const GroupMsg& msg)
+            static bool cancelApplyForChallenge(const GroupMsg& msg)
             {
                 auto group = Group(msg.group_id);
                 auto s = group.getStatus();
@@ -253,7 +253,7 @@ namespace yobot {
                 return false;
             }
 
-            inline int toUnit(const std::string& unitStr)
+            static int toUnit(const std::string& unitStr)
             {
                 static const std::regex partenUnitK("[kK]|千");
                 static const std::regex partenUnitW("[wW]|万");
@@ -269,7 +269,7 @@ namespace yobot {
                 return unit;
             }
 
-            inline std::string checkChallengeInput(const bool isKilled, const std::string& applyNum, const std::smatch& matches)
+            static std::string checkChallengeInput(const bool isKilled, const std::string& applyNum, const std::smatch& matches)
             {
                 if (isKilled)
                 {
@@ -293,7 +293,7 @@ namespace yobot {
                 return {};
             }
 
-            inline std::string getChallegeBossNum(const bool isKilled, const std::string& applyNum, const std::smatch& matches)
+            static std::string getChallegeBossNum(const bool isKilled, const std::string& applyNum, const std::smatch& matches)
             {
                 auto bossNum = applyNum;
                 if (isKilled)
@@ -320,7 +320,7 @@ namespace yobot {
                 return bossNum;
             }
 
-            inline std::int64_t getChallengeDamage(const bool isKilled, const std::int64_t bossHP, const std::smatch& matches)
+            static std::int64_t getChallengeDamage(const bool isKilled, const std::int64_t bossHP, const std::smatch& matches)
             {
                 if (isKilled)
                 {
@@ -338,7 +338,7 @@ namespace yobot {
                 }
             }
 
-            inline std::string processReportChanllenge(const GroupMsg& msg, const std::smatch& matches)
+            static std::string processReportChanllenge(const GroupMsg& msg, const std::smatch& matches)
             {
                 auto group = Group(msg.group_id);
                 auto s = group.getStatus();
@@ -381,7 +381,7 @@ namespace yobot {
                 return result + "\n" + toText(group.getStatus());
             }
 
-            std::string reportChallenge(const GroupMsg& msg)
+            static std::string reportChallenge(const GroupMsg& msg)
             {
                 constexpr auto partenStr = R"(([1-5])?(\s*)?(\d+)?([wWkK]|万|千)?$)";
                 static const std::regex parten(partenStr);
@@ -400,7 +400,7 @@ namespace yobot {
                 return FormatErrorResponse;
             }
 
-            std::string cancelReportChallenge(const GroupMsg& msg)
+            static std::string cancelReportChallenge(const GroupMsg& msg)
             {
                 auto group = Group(msg.group_id);
                 group.popChallenge();
@@ -408,7 +408,7 @@ namespace yobot {
             }
         }
 
-        Action groupAction(GroupAction act)
+        static Action groupAction(GroupAction act)
         {
             return [=](const Message& msg) {
                 return std::visit([=](auto&& x) -> std::string {

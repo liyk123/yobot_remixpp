@@ -16,21 +16,21 @@ namespace yobot {
 
     namespace system {
         namespace detail {
-            inline bool isSuperAdmin(uint64_t userId)
+            static bool isSuperAdmin(uint64_t userId)
             {
                 auto& globalConfig = std::get<2>(getInstance());
                 auto& a = globalConfig["super-admin"].get_ref<const ordered_json::array_t&>();
                 return std::find(a.begin(), a.end(), userId) != a.end();
             }
 
-            inline bool isSuperAdmin(const Message& msg)
+            static bool isSuperAdmin(const Message& msg)
             {
                 return std::visit([](auto&& x) {
                     return isSuperAdmin(x.user_id);
                 }, msg);
             }
 
-            inline void fetchBossData(BoosData& bossData)
+            static void fetchBossData(BoosData& bossData)
             {
                 auto&& [itArea, itBossHP, itLapRange, itBossId, itBossName] = bossData;
                 httplib::Client client("https://pcr.satroki.tech");
@@ -65,7 +65,7 @@ namespace yobot {
                 }
             }
 
-            void updateBossData()
+            static void updateBossData()
             {
                 static std::mutex mtUpdate;
                 std::lock_guard lock(mtUpdate);
@@ -91,7 +91,7 @@ namespace yobot {
                 std::ofstream(ConfigName) << globalConfig.dump(4) << std::endl;
             }
 
-            std::string statistics()
+            static std::string statistics()
             {
                 auto& dbPool = std::get<1>(getInstance());
                 auto db = dbPool->get();

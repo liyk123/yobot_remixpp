@@ -13,7 +13,7 @@ constexpr auto DB_Name = "yobotdata_new.db";
 constexpr auto ConfigName = "yobot_config.json";
 
 namespace yobot {
-    inline auto InitConfig() noexcept
+    static auto InitConfig() noexcept
     {
 #ifdef _WIN32
         ::system("chcp 65001 && cls");
@@ -40,7 +40,7 @@ namespace yobot {
         return std::make_tuple(botConfig, dbConfig, globalConfig);
     }
 
-    inline std::shared_ptr<yobot::DB_Pool> InitDatabase(const std::shared_ptr<yobot::DB_Config>& dbConfig) noexcept
+    static std::shared_ptr<yobot::DB_Pool> InitDatabase(const std::shared_ptr<yobot::DB_Config>& dbConfig) noexcept
     {
         auto dbPool = std::make_shared<yobot::DB_Pool>(dbConfig, 2);
         auto db = dbPool->get();
@@ -58,7 +58,7 @@ namespace yobot {
         return dbPool;
     }
 
-    inline Instance construct()
+    static Instance construct()
     {
         auto&& [botConfig, dbConfig, globalConfig] = InitConfig();
         auto dbPool = InitDatabase(dbConfig);
@@ -87,7 +87,7 @@ namespace yobot {
         return g_instance;
     }
 
-    inline coro::task<> processGroupMsgAsync(twobot::ApiSet apiSet, GroupMsg msg, Action action)
+    static coro::task<> processGroupMsgAsync(twobot::ApiSet apiSet, GroupMsg msg, Action action)
     {
         auto& groupMutexMap = std::get<4>(yobot::getInstance());
         auto response = std::string{};
@@ -101,7 +101,7 @@ namespace yobot {
         }
     }
 
-    inline coro::task<> processPrivateMsgAsync(twobot::ApiSet apiSet, PrivateMsg msg, Action action)
+    static coro::task<> processPrivateMsgAsync(twobot::ApiSet apiSet, PrivateMsg msg, Action action)
     {
         auto response = action(msg);
         if (!response.empty())
@@ -110,7 +110,7 @@ namespace yobot {
         }
     }
 
-    inline coro::task<> processMessageAysnc(const Message& msg)
+    static coro::task<> processMessageAysnc(const Message& msg)
     {
         auto& regexActionVec = std::get<3>(yobot::getInstance());
         auto raw_message = std::visit([](auto&& x) { return x.raw_message; }, msg);

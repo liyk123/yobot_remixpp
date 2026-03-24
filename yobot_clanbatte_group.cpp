@@ -10,7 +10,7 @@ namespace yobot {
 
 			NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(ChallengerDetail, is_continue, behalf, tree, msg);
 
-			inline void recordChallenge(const Challenge& challenge, status& s)
+			static void recordChallenge(const Challenge& challenge, status& s)
 			{
 				static const json zeroHPList = { {"1", 0}, { "2",0 }, { "3",0 }, { "4",0 }, { "5",0 } };
 				if (challenge.damage == 0)
@@ -55,7 +55,7 @@ namespace yobot {
 				}
 			}
 
-			inline void revokeChallenge(const Challenge& challenge, status& s)
+			static void revokeChallenge(const Challenge& challenge, status& s)
 			{
 				static const json zeroHPList = { {"1", 0}, { "2",0 }, { "3",0 }, { "4",0 }, { "5",0 } };
 				auto strI = std::to_string(challenge.bossNum);
@@ -80,14 +80,14 @@ namespace yobot {
 				targetList[strI] = challenge.bossHP + challenge.damage;
 			}
 
-			inline std::time_t toDateOnly(const std::time_t time)
+			static std::time_t toDateOnly(const std::time_t time)
 			{
 				auto timePoint = std::chrono::system_clock::from_time_t(time);
 				auto timeDays = std::chrono::floor<std::chrono::days>(timePoint);
 				return std::chrono::system_clock::to_time_t(timeDays);
 			}
 
-			inline std::time_t toTimeOnly(const std::time_t time)
+			static std::time_t toTimeOnly(const std::time_t time)
 			{
 				auto timePoint = std::chrono::system_clock::from_time_t(time);
 				auto timeOnly = timePoint - std::chrono::floor<std::chrono::days>(timePoint);
@@ -318,7 +318,7 @@ namespace yobot {
 				);
 			}
 
-			inline void Group::updateChanllengerList(const std::function<void(json&)>& func)
+			void Group::updateChanllengerList(const std::function<void(json&)>& func)
 			{
 				auto db = m_pool->get();
 				auto raw = db(
