@@ -159,9 +159,9 @@ namespace yobot {
     {
         auto& onebotIO = std::get<0>(getInstance());
         auto& globalConfig = std::get<2>(getInstance());
-        std::cout << "Start listening:" << globalConfig["port"] << std::endl;
         std::signal(SIGINT, onSignalReceived);
         std::signal(SIGTERM, onSignalReceived);
+        std::cout << "Start listening:" << globalConfig["port"] << std::endl;
         onebotIO->start();
     }
 }
