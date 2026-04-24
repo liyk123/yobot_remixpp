@@ -24,7 +24,9 @@ namespace yobot {
         std::locale::global(std::locale(TargetLocaleName));
         std::locale::global(std::locale(std::locale(), C_LocaleName, std::locale::numeric));
         auto dbConfig = std::make_shared<yobot::DB_Config>(DB_Name, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE);
-        //dbConfig->debug = true;
+#ifdef DEBUG
+        dbConfig->debug = true;
+#endif
         if (!std::filesystem::exists(ConfigName) || std::filesystem::file_size(ConfigName) == 0)
         {
             std::ofstream(ConfigName) << DEFAULT_CONFIG;
