@@ -71,6 +71,37 @@ namespace yobot {
                 return toPicture(Group(msg.group_id).getStatus());
             }
 
+            static std::string toMarkdown(const status& status)
+            {
+                auto mdStr = std::string();
+                auto& globalConfig = std::get<2>(getInstance());
+                auto& ids = globalConfig["boss_id"]["cn"];
+                auto& [lap, gameServer, chalList, subList, thisHPList, nextHPList] = status;
+                auto phase = getPhase(lap, gameServer);
+                auto& lapHPList = globalConfig["boss_hp"][gameServer][phase].get_ref<const ordered_json::array_t&>();
+                for (std::size_t i = 1; i <= 5; ++i)
+                {
+                    auto strI = StrIArray[i - 1];
+                    auto bossID = ids[i - 1].get<ordered_json::number_integer_t>();
+                    bool chanllenging = !chalList.is_discarded() && chalList.contains(strI) && !chalList[strI].empty();
+                    auto img = std::format("![img #40px #40px](https://redive.estertion.win/icon/unit/{}.webp)", bossID);
+                    auto& HPList = (thisHPList[strI] == 0 ? nextHPList : thisHPList);
+                    auto HP = HPList[strI].get<std::int64_t>();
+                    auto fullHP = lapHPList[i - 1].get<std::int64_t>();
+                    auto cmdStr = httplib::encode_uri(std::format("/申请出刀{}", i));
+                    auto qqHTM = std::format(R"(<qqbot-cmd-input text="{}" show="{}/{}" reference="false" />)", cmdStr, HP, fullHP);
+                    mdStr += std::format("{}&nbsp;&nbsp;&nbsp;&nbsp;{}\n", img, (HP ? qqHTM : std::string{"无法挑战"}));
+                }
+                json data = {};
+                data["markdown"]["content"] = mdStr;
+                return std::format("[CQ:markdown,data=base64://{}]", httplib::detail::base64_encode(data.dump()));
+            }
+
+            static std::string showPanel(const GroupMsg& msg)
+            {
+                return toMarkdown(Group(msg.group_id).getStatus());
+            }
+
             static bool isFilledWithZero(const json::array_t& HPList)
             {
                 return std::all_of(HPList.begin(), HPList.end(), [](auto&& x) { return x == 0; });
@@ -468,6 +499,13 @@ namespace yobot {
         {
             static const std::regex rgx("状态");
             static const Action act = groupAction(detail::showStatus);
+            return { rgx,act };
+        }
+
+        RegexAction showPanel()
+        {
+            static const std::regex rgx("面板");
+            static const Action act = groupAction(detail::showPanel);
             return { rgx,act };
         }
 

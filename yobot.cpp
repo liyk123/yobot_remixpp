@@ -73,6 +73,7 @@ namespace yobot {
             clanbattle::joinClan(),
             clanbattle::showProgress(),
             clanbattle::showStatus(),
+            clanbattle::showPanel(),
             clanbattle::setProgress(),
             clanbattle::resetProgress(),
             clanbattle::applyForChallenge(),

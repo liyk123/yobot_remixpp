@@ -6,6 +6,7 @@ namespace yobot {
         RegexAction joinClan();
         RegexAction showProgress();
         RegexAction showStatus();
+        RegexAction showPanel();
         RegexAction setProgress();
         RegexAction resetProgress();
         RegexAction applyForChallenge();
