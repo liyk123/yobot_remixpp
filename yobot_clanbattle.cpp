@@ -456,7 +456,7 @@ namespace yobot {
 
         RegexAction createClan()
         {
-            static const std::regex rgx("创建公会");
+            static const std::regex rgx("创建(国服)?公会");
             static const Action act = [](const yobot::Message& msg) {
                 return std::visit([=](auto&& x) -> std::string {
                     if constexpr (std::is_convertible_v<decltype(x), GroupMsg>)
