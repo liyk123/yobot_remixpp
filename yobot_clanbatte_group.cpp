@@ -76,7 +76,9 @@ namespace yobot {
 						}
 					}
 				}
-				auto& targetList = (s.nextLapHPList == zeroHPList || s.thisLapHPList[strI] != 0) ? s.thisLapHPList : s.nextLapHPList;
+				bool isThisLapKilled = (s.nextLapHPList[strI] != 0 && challenge.bossHP == 0);
+				bool isThisLap = (s.nextLapHPList == zeroHPList || s.thisLapHPList[strI] != 0 || isThisLapKilled);
+				auto& targetList = isThisLap ? s.thisLapHPList : s.nextLapHPList;
 				targetList[strI] = challenge.bossHP + challenge.damage;
 			}
 
