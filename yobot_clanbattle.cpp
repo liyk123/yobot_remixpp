@@ -8,7 +8,7 @@ constexpr auto Group404ErrorResponse = "未检测到数据，请先创建公会�
 constexpr auto FormatErrorResponse = "格式错误";
 constexpr std::string_view StrIArray[] = { "1","2","3","4","5" };
 
-static std::int64_t operator""_k(std::uint64_t val)
+static std::int64_t operator""_k(unsigned long long val)
 {
     return val * 1000;
 }
