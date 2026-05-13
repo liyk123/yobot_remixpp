@@ -8,6 +8,32 @@ constexpr auto Group404ErrorResponse = "未检测到数据，请先创建公会�
 constexpr auto FormatErrorResponse = "格式错误";
 constexpr std::string_view StrIArray[] = { "1","2","3","4","5" };
 
+static std::int64_t operator""_k(std::uint64_t val)
+{
+    return val * 1000;
+}
+
+static std::string createQQBotCMDInput(const std::string& cmdStr, const std::string_view showStr, const bool refer = false)
+{
+    return std::format(R"(<qqbot-cmd-input text="{}" show="{}" reference="{}" />)", httplib::encode_uri(cmdStr), showStr, refer);
+}
+
+static json createQQBotButton(std::string_view id, std::string_view label, std::string_view data, std::uint8_t permission = 2)
+{
+    return json{
+        {"id", id},
+        {"render_data", {{"label",label}, {"visited_label", label}, {"style", 1}}},
+        {
+            "action", {
+                {"type",2},
+                {"permission", {{"type", permission}}},
+                {"unsupport_tips", "操作不支持"},
+                {"data", data}
+            }
+        }
+    };
+}
+
 namespace yobot {
     namespace clanbattle {
         namespace detail {
@@ -73,27 +99,36 @@ namespace yobot {
 
             static std::string toMarkdown(const status& status)
             {
-                auto mdStr = std::string();
                 auto& globalConfig = std::get<2>(getInstance());
                 auto& ids = globalConfig["boss_id"]["cn"];
                 auto& [lap, gameServer, chalList, subList, thisHPList, nextHPList] = status;
                 auto phase = getPhase(lap, gameServer);
+                auto mdStr = std::format("现在是**{}**阶段，第**{}**周目：\n>", (char)(phase + 'A'), lap);
                 auto& lapHPList = globalConfig["boss_hp"][gameServer][phase].get_ref<const ordered_json::array_t&>();
                 for (std::size_t i = 1; i <= 5; ++i)
                 {
                     auto strI = StrIArray[i - 1];
                     auto bossID = ids[i - 1].get<ordered_json::number_integer_t>();
                     bool chanllenging = !chalList.is_discarded() && chalList.contains(strI) && !chalList[strI].empty();
-                    auto img = std::format("![img #40px #40px](https://redive.estertion.win/icon/unit/{}.webp)", bossID);
-                    auto& HPList = (thisHPList[strI] == 0 ? nextHPList : thisHPList);
+                    auto img = std::format("![img #32px #32px](https://redive.estertion.win/icon/unit/{}.webp)", bossID);
+                    bool lapFlag = thisHPList[strI] == 0;
+                    auto& HPList = (lapFlag ? nextHPList : thisHPList);
                     auto HP = HPList[strI].get<std::int64_t>();
                     auto fullHP = lapHPList[i - 1].get<std::int64_t>();
-                    auto cmdStr = httplib::encode_uri(std::format("/申请出刀{}", i));
-                    auto qqHTM = std::format(R"(<qqbot-cmd-input text="{}" show="{}/{}" reference="false" />)", cmdStr, HP, fullHP);
-                    mdStr += std::format("{}&nbsp;&nbsp;&nbsp;&nbsp;{}\n", img, (HP ? qqHTM : std::string{"无法挑战"}));
+                    auto cmdStr = std::format("/申请出刀{}", i);
+                    auto showStr = std::format("{}{}/{}万", (HP >= 10_k ? HP / 10_k : HP % 10_k), (HP >= 10_k ? "万" : ""), fullHP / 10_k);
+                    auto optStr = std::format("{}>{}", (lapFlag ? ">" : ""), createQQBotCMDInput(cmdStr, showStr));
+                    mdStr += std::format("{}&nbsp;&nbsp;{}\n", img, (HP ? optStr.c_str() : "无法挑战"));
                 }
                 json data = {};
                 data["markdown"]["content"] = mdStr;
+                data["keyboard"]["content"]["rows"] = json::array_t{
+                    {{"buttons",json::array_t{createQQBotButton("1","面板","/面板")}}},
+                    {{"buttons",json::array_t{
+                        createQQBotButton("2","撤销申请","/撤销申请"),
+                        createQQBotButton("3","撤销出刀","/撤销出刀")
+                    }}}
+                };
                 return std::format("[CQ:markdown,data=base64://{}]", httplib::detail::base64_encode(data.dump()));
             }
 
