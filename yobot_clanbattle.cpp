@@ -89,7 +89,10 @@ namespace yobot {
                 auto& globalConfig = std::get<2>(getInstance());
                 auto paintSvrUrl = globalConfig["paint_secheme_host_port"].get<std::string_view>();
                 auto rawUri = std::format("{}/progress?data={}", paintSvrUrl, data.dump());
-                return std::format("[CQ:image,file={}]", httplib::encode_uri(rawUri));
+                auto mdStr = std::format(R"(![img #480px #640px]({}))", rawUri);
+                data.clear();
+                data.emplace("markdown", json::object()).first->emplace("content", mdStr);
+                return std::format("[CQ:markdown,data=base64://{}]", httplib::detail::base64_encode(data.dump()));
             }
 
             static std::string showStatus(const GroupMsg& msg)
