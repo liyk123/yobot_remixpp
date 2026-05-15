@@ -2,6 +2,7 @@
 #include <httplib.h>
 #include "yobot.h"
 #include "yobotdata_new.h"
+#include "yobot_tools.h"
 
 constexpr auto VersionInfo = "Branch: " GIT_BRANCH "\nCommit: " GIT_VERSION "\nDate: " GIT_DATE;
 constexpr auto ConfigName = "yobot_config.json";
@@ -115,7 +116,7 @@ namespace yobot {
         {
             static const std::regex rgx("version");
             static const Action act = [](const Message& msg) {
-                return VersionInfo;
+                return yobot::tools::packMarkdown(VersionInfo);
             };
             return { rgx,act };
         }
