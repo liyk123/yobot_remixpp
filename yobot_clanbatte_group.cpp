@@ -1,6 +1,6 @@
 #include "yobot.h"
 #include "yobot_clanbatte_group.h"
-#include "yobot_clanbattle_tools.h"
+#include "yobot_tools.h"
 
 namespace yobot {
 	namespace clanbattle {

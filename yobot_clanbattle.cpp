@@ -1,45 +1,20 @@
 #include <httplib.h>
 #include "yobot.h"
 #include "yobot_clanbatte_group.h"
-#include "yobot_clanbattle_tools.h"
+#include "yobot_tools.h"
 
 constexpr auto TargetLocaleName = "zh_CN.UTF-8";
 constexpr auto Group404ErrorResponse = "未检测到数据，请先创建公会！";
 constexpr auto FormatErrorResponse = "格式错误";
 constexpr std::string_view StrIArray[] = { "1","2","3","4","5" };
 
+using yobot::tools::createQQBotButton;
+using yobot::tools::createQQBotCMDInput;
+using yobot::tools::packMarkdown;
+
 static std::int64_t operator""_k(unsigned long long val)
 {
     return val * 1000;
-}
-
-static std::string createQQBotCMDInput(const std::string& cmdStr, const std::string_view showStr, const bool refer = false)
-{
-    return std::format(R"(<qqbot-cmd-input text="{}" show="{}" reference="{}" />)", httplib::encode_uri(cmdStr), showStr, refer);
-}
-
-static json createQQBotButton(std::string_view id, std::string_view label, std::string_view data, std::uint8_t permission = 2)
-{
-    return json{
-        {"id", id},
-        {"render_data", {{"label",label}, {"visited_label", label}, {"style", 1}}},
-        {
-            "action", {
-                {"type",2},
-                {"permission", {{"type", permission}}},
-                {"unsupport_tips", "操作不支持"},
-                {"data", data}
-            }
-        }
-    };
-}
-
-static std::string packMarkdown(std::string_view content, const json::array_t& buttons = {})
-{
-    json data{};
-    data.emplace("markdown", json::object()).first->emplace("content", content);
-    data.emplace("keyboard", json::object()).first->emplace("content", json::object()).first->emplace("rows", buttons);
-    return std::format("[CQ:markdown,data=base64://{}]", httplib::detail::base64_encode(data.dump()));
 }
 
 namespace yobot {
