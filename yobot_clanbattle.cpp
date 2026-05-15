@@ -76,7 +76,8 @@ namespace yobot {
 
             static std::string showProgess(const GroupMsg& msg)
             {
-                return toText(Group(msg.group_id).getStatus());
+                auto content = toText(Group(msg.group_id).getStatus());
+                return packMarkdown(content);
             }
 
             static std::string toPicture(const status& status)
