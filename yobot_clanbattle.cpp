@@ -34,6 +34,14 @@ static json createQQBotButton(std::string_view id, std::string_view label, std::
     };
 }
 
+static std::string packMarkdown(std::string_view content, const json::array_t& buttons = {})
+{
+    json data{};
+    data.emplace("markdown", json::object()).first->emplace("content", content);
+    data.emplace("keyboard", json::object()).first->emplace("content", json::object()).first->emplace("rows", buttons);
+    return std::format("[CQ:markdown,data=base64://{}]", httplib::detail::base64_encode(data.dump()));
+}
+
 namespace yobot {
     namespace clanbattle {
         namespace detail {
@@ -89,15 +97,13 @@ namespace yobot {
                 auto& globalConfig = std::get<2>(getInstance());
                 auto paintSvrUrl = globalConfig["paint_secheme_host_port"].get<std::string_view>();
                 auto rawUri = std::format("{}/progress?data={}", paintSvrUrl, data.dump());
-                auto mdStr = std::format(R"(![img #480px #640px]({}))", rawUri);
-                data.clear();
-                data.emplace("markdown", json::object()).first->emplace("content", mdStr);
-                return std::format("[CQ:markdown,data=base64://{}]", httplib::detail::base64_encode(data.dump()));
+                return std::format(R"(![img #480px #640px]({}))", rawUri);
             }
 
             static std::string showStatus(const GroupMsg& msg)
             {
-                return toPicture(Group(msg.group_id).getStatus());
+                auto content = toPicture(Group(msg.group_id).getStatus());
+                return packMarkdown(content);
             }
 
             static std::string toMarkdown(const status& status)
@@ -123,21 +129,20 @@ namespace yobot {
                     auto optStr = std::format("{}>{}", (lapFlag ? ">" : ""), createQQBotCMDInput(cmdStr, showStr));
                     mdStr += std::format("{}&nbsp;&nbsp;{}\n", img, (HP ? optStr.c_str() : "无法挑战"));
                 }
-                json data = {};
-                data["markdown"]["content"] = mdStr;
-                data["keyboard"]["content"]["rows"] = json::array_t{
+                return mdStr;
+            }
+
+            static std::string showPanel(const GroupMsg& msg)
+            {
+                auto content = toMarkdown(Group(msg.group_id).getStatus());
+                auto buttons = json::array_t{
                     {{"buttons",json::array_t{createQQBotButton("1","面板","/面板")}}},
                     {{"buttons",json::array_t{
                         createQQBotButton("2","撤销申请","/撤销申请"),
                         createQQBotButton("3","撤销出刀","/撤销出刀")
                     }}}
                 };
-                return std::format("[CQ:markdown,data=base64://{}]", httplib::detail::base64_encode(data.dump()));
-            }
-
-            static std::string showPanel(const GroupMsg& msg)
-            {
-                return toMarkdown(Group(msg.group_id).getStatus());
+                return packMarkdown(content, buttons);
             }
 
             static bool isFilledWithZero(const json::array_t& HPList)
