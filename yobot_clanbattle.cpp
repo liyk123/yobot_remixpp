@@ -48,6 +48,12 @@ namespace yobot {
             using tools::adaptHPList;
             using tools::getPhase;
 
+            static std::string joinClan(const GroupMsg& msg)
+            {
+                detail::Group(msg.group_id).addMember(msg.user_id);
+                return "已加入公会";
+            }
+
             static std::string toText(const status& status)
             {
                 auto& globalConfig = std::get<2>(getInstance());
@@ -213,7 +219,7 @@ namespace yobot {
                 return true;
             }
 
-            static bool setProgress(const GroupMsg& msg)
+            static std::string setProgress(const GroupMsg& msg)
             {
                 constexpr auto partenStr = R"(\[\s*(\d+),\s*([wWkK]|万|千),\s*(\[\s*\d+(?:,\s*\d+){4}\s*\]),\s*(\[\s*\d+(?:,\s*\d+){4}\s*\])\s*\]$)";
                 static const std::regex parten(partenStr);
@@ -236,7 +242,7 @@ namespace yobot {
                         if (checkAndFilterProgress(gameServer, lap, unit, thisHPList, nextHPList))
                         {
                             group.setStatus(lap, adaptHPList(thisHPList), adaptHPList(nextHPList));
-                            return true;
+                            return "进度已修改：\n" + toText(group.getStatus());
                         }
                     }
                 }
@@ -244,10 +250,10 @@ namespace yobot {
                 {
                     std::cerr << e.what() << '\n';
                 }
-                return false;
+                return FormatErrorResponse;
             }
 
-            static void resetProgess(const GroupMsg& msg)
+            static std::string resetProgess(const GroupMsg& msg)
             {
                 auto group = detail::Group(msg.group_id);
                 auto gameServer = group.getGameServer();
@@ -257,6 +263,7 @@ namespace yobot {
                 auto HPList = adaptHPList(lapHPList);
                 group.setStatus(1, HPList, HPList);
                 group.clearChallenge();
+                return "进度已重置：\n" + toText(group.getStatus());
             }
 
             static bool isBossAlive(const status& s, const std::string& bossNum)
@@ -283,7 +290,7 @@ namespace yobot {
                 return !getApplicationBossNum(s, user_id).empty();
             }
 
-            static bool applyForChallenge(const GroupMsg& msg)
+            static std::string applyForChallenge(const GroupMsg& msg)
             {
                 constexpr auto partenStr = R"(([1-5])\s*(:|：|\s)?\s*(\S*)$)";
                 static const std::regex parten(partenStr);
@@ -304,7 +311,7 @@ namespace yobot {
                                 .is_continue = isContinue,
                                 .msg = message
                                 });
-                            return true;
+                            return "申请成功：\n" + toText(group.getStatus());
                         }
                     }
                 }
@@ -312,10 +319,10 @@ namespace yobot {
                 {
                     std::cerr << e.what() << std::endl;
                 }
-                return false;
+                return "申请失败，格式或状态错误";
             }
 
-            static bool cancelApplyForChallenge(const GroupMsg& msg)
+            static std::string cancelApplyForChallenge(const GroupMsg& msg)
             {
                 auto group = Group(msg.group_id);
                 auto s = group.getStatus();
@@ -323,9 +330,9 @@ namespace yobot {
                 if (!bossNum.empty())
                 {
                     group.removeChallenger(bossNum, msg.user_id);
-                    return true;
+                    return "取消申请成功：\n" + toText(group.getStatus());
                 }
-                return false;
+                return "没有申请记录";
             }
 
             static int toUnit(const std::string& unitStr)
@@ -525,10 +532,7 @@ namespace yobot {
         RegexAction joinClan()
         {
             static const std::regex rgx("加入公会");
-            static const Action act = groupAction([](const GroupMsg& msg) {
-                detail::Group(msg.group_id).addMember(msg.user_id);
-                return "已加入公会";
-            });
+            static const Action act = groupAction(detail::joinClan);
             return { rgx,act };
         }
 
@@ -556,43 +560,28 @@ namespace yobot {
         RegexAction setProgress()
         {
             static const std::regex rgx(R"(^(设置|调整|修改|变更|更新|改变)进度.*)");
-            static const Action act = groupAction([](const GroupMsg& msg) {
-                return detail::setProgress(msg)
-                    ? "进度已修改：\n" + detail::showProgess(msg)
-                    : FormatErrorResponse;
-            });
+            static const Action act = groupAction(detail::setProgress);
             return { rgx,act };
         }
 
         RegexAction resetProgress()
         {
             static const std::regex rgx("重置进度");
-            static const Action act = groupAction([](const GroupMsg& msg) {
-                detail::resetProgess(msg);
-                return "进度已重置：\n" + detail::showProgess(msg);
-            });
+            static const Action act = groupAction(detail::resetProgess);
             return { rgx,act };
         }
 
         RegexAction applyForChallenge()
         {
             static const std::regex rgx("^申请(出|补|出补)刀.*");
-            static const Action act = groupAction([](const GroupMsg& msg) {
-                return detail::applyForChallenge(msg)
-                    ? "申请成功：\n" + detail::showProgess(msg)
-                    : "申请失败，格式或状态错误";
-            });
+            static const Action act = groupAction(detail::applyForChallenge);
             return { rgx, act };
         }
 
         RegexAction cancelApplyForChallenge()
         {
             static const std::regex rgx("^(取消|撤销)申请");
-            static const Action act = groupAction([](const GroupMsg& msg) {
-                return detail::cancelApplyForChallenge(msg)
-                    ? "取消申请成功：\n" + detail::showProgess(msg)
-                    : "没有申请记录";
-            });
+            static const Action act = groupAction(detail::cancelApplyForChallenge);
             return { rgx, act };
         }
 
