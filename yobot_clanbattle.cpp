@@ -117,7 +117,7 @@ namespace yobot {
             static std::string showPanel(const GroupMsg& msg)
             {
                 auto content = toMarkdown(Group(msg.group_id).getStatus());
-                auto buttons = json::array_t{
+                static const auto buttons = json::array_t{
                     {{"buttons",json::array_t{createQQBotButton("面板","/面板")}}},
                     {{"buttons",json::array_t{
                         createQQBotButton("撤销申请","/撤销申请"),
