@@ -116,7 +116,8 @@ namespace yobot {
         {
             static const std::regex rgx("version");
             static const Action act = [](const Message& msg) {
-                return yobot::tools::packMarkdown(VersionInfo);
+                static const auto info = yobot::tools::packMarkdown(VersionInfo);
+                return info;
             };
             return { rgx,act };
         }
