@@ -57,7 +57,7 @@ namespace yobot {
 			return std::format(R"(<qqbot-cmd-input text="{}" show="{}" reference="{}" />)", httplib::encode_uri(cmdStr), showStr, refer);
 		}
 
-		json createQQBotButton(std::string_view label, std::string_view data, std::uint8_t permission, std::string_view id)
+		json createQQBotButton(const std::string_view label, const std::string_view data, const std::uint8_t permission, const std::string_view id)
 		{
 			return json{
 				{"id", id},
@@ -73,7 +73,7 @@ namespace yobot {
 			};
 		}
 
-		std::string packMarkdown(std::string_view content, const json::array_t& buttons = {})
+		std::string packMarkdown(const std::string_view content, const json::array_t& buttons = {})
 		{
 			json data{};
 			data.emplace("markdown", json::object()).first->emplace("content", content);

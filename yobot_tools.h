@@ -11,7 +11,7 @@ namespace yobot {
 
 	namespace tools {
 		std::string createQQBotCMDInput(const std::string& cmdStr, const std::string_view showStr, const bool refer = false);
-		json createQQBotButton(std::string_view label,std::string_view data, std::uint8_t permission = 2, std::string_view id = {});
-		std::string packMarkdown(std::string_view content, const json::array_t& buttons = {});
+		json createQQBotButton(const std::string_view label, const std::string_view data, const std::uint8_t permission = 2, const std::string_view id = {});
+		std::string packMarkdown(const std::string_view content, const json::array_t& buttons = {});
 	}
 }
