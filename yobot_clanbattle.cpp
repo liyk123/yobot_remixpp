@@ -121,7 +121,7 @@ namespace yobot {
                     {{"buttons",json::array_t{createQQBotButton("1","面板","/面板")}}},
                     {{"buttons",json::array_t{
                         createQQBotButton("2","撤销申请","/撤销申请"),
-                        createQQBotButton("3","撤销出刀","/撤销出刀")
+                        createQQBotButton("3","撤销报刀","/撤销报刀")
                     }}}
                 };
                 return packMarkdown(content, buttons);
