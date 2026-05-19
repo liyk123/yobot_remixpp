@@ -118,10 +118,10 @@ namespace yobot {
             {
                 auto content = toMarkdown(Group(msg.group_id).getStatus());
                 auto buttons = json::array_t{
-                    {{"buttons",json::array_t{createQQBotButton("1","面板","/面板")}}},
+                    {{"buttons",json::array_t{createQQBotButton("面板","/面板")}}},
                     {{"buttons",json::array_t{
-                        createQQBotButton("2","撤销申请","/撤销申请"),
-                        createQQBotButton("3","撤销报刀","/撤销报刀")
+                        createQQBotButton("撤销申请","/撤销申请"),
+                        createQQBotButton("撤销报刀","/撤销报刀")
                     }}}
                 };
                 return packMarkdown(content, buttons);
