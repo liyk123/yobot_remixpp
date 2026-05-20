@@ -31,7 +31,10 @@ namespace yobot {
         {
             std::ofstream(ConfigName) << DEFAULT_CONFIG;
         }
-        auto globalConfig = ordered_json::parse(std::ifstream(ConfigName));
+        auto globalConfig = ordered_json::parse(DEFAULT_CONFIG);
+        auto orignConfig = ordered_json::parse(std::ifstream(ConfigName));
+        globalConfig.merge_patch(orignConfig);
+        std::ofstream(ConfigName) << globalConfig.dump(4);
         auto accessToken = globalConfig["access_token"].get<std::string>();
         twobot::Config botConfig = {
             .host = "10.9.0.1",
