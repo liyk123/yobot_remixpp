@@ -52,7 +52,7 @@ namespace yobot {
 	}
 
 	namespace tools {
-		std::string createQQBotCMDInput(const std::string& cmdStr, const std::string_view showStr, const bool refer = false)
+		std::string createQQBotCMDInput(const std::string& cmdStr, const std::string_view showStr, const bool refer)
 		{
 			return std::format(R"(<qqbot-cmd-input text="{}" show="{}" reference="{}" />)", httplib::encode_uri(cmdStr), showStr, refer);
 		}
@@ -73,7 +73,7 @@ namespace yobot {
 			};
 		}
 
-		std::string packMarkdown(const std::string_view content, const json::array_t& buttons = {})
+		std::string packMarkdown(const std::string_view content, const json::array_t& buttons)
 		{
 			json data{};
 			data.emplace("markdown", json::object()).first->emplace("content", content);
