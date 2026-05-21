@@ -4,6 +4,7 @@
     "port": 9222,
     "access_token": "",
     "paint_secheme_host_port": "http://127.0.0.1:9540",
+    "gsk_secheme_host_port" : "http://127.0.0.1:9444",
     "client_salt": null,
     "public_address": null,
     "public_basepath": "/",
