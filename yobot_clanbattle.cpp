@@ -11,6 +11,7 @@ constexpr std::string_view StrIArray[] = { "1","2","3","4","5" };
 using yobot::tools::createQQBotButton;
 using yobot::tools::createQQBotCMDInput;
 using yobot::tools::packMarkdown;
+using yobot::tools::createQQAt;
 
 static std::int64_t operator""_k(unsigned long long val)
 {
@@ -50,7 +51,7 @@ namespace yobot {
                     auto colorStr = (thisHPList[strI] == 0 ? "🔵" : "🔴");
                     auto chalStr = (chanllenging ? "🈶" : "🈚️");
                     auto warnStr = (rate < 4 ? "⚠️" : "🟢");
-                    message += std::format("\n{}. {:█<{}}{:░<{}} {}{}{}", strI, "", rate, "", 10 - rate, colorStr, chalStr, warnStr);
+                    message += std::format("\n>{}. {:█<{}}{:░<{}} {}{}{}", strI, "", rate, "", 10 - rate, colorStr, chalStr, warnStr);
                 }
                 return message;
             }
@@ -217,7 +218,7 @@ namespace yobot {
                         if (checkAndFilterProgress(gameServer, lap, unit, thisHPList, nextHPList))
                         {
                             group.setStatus(lap, adaptHPList(thisHPList), adaptHPList(nextHPList));
-                            return "进度已修改：\n" + toText(group.getStatus());
+                            return packMarkdown("进度已修改：\n" + toText(group.getStatus()));
                         }
                     }
                 }
@@ -238,7 +239,7 @@ namespace yobot {
                 auto HPList = adaptHPList(lapHPList);
                 group.setStatus(1, HPList, HPList);
                 group.clearChallenge();
-                return "进度已重置：\n" + toText(group.getStatus());
+                return packMarkdown("进度已重置：\n" + toText(group.getStatus()));
             }
 
             static bool isBossAlive(const status& s, const std::string& bossNum)
@@ -286,7 +287,7 @@ namespace yobot {
                                 .is_continue = isContinue,
                                 .msg = message
                                 });
-                            return "申请成功：\n" + toText(group.getStatus());
+                            return packMarkdown(createQQAt(msg.user_id) + "申请成功：\n" + toText(group.getStatus()));
                         }
                     }
                 }
@@ -305,7 +306,7 @@ namespace yobot {
                 if (!bossNum.empty())
                 {
                     group.removeChallenger(bossNum, msg.user_id);
-                    return "取消申请成功：\n" + toText(group.getStatus());
+                    return packMarkdown(createQQAt(msg.user_id) + "取消申请成功：\n" + toText(group.getStatus()));
                 }
                 return "没有申请记录";
             }
@@ -447,7 +448,8 @@ namespace yobot {
                     auto matches = tools::regexSearch(parten, msg.raw_message);
                     if (!matches.empty())
                     {
-                        return processReportChanllenge(msg, matches);
+                        auto content = createQQAt(msg.user_id) + processReportChanllenge(msg, matches);
+                        return packMarkdown(content);
                     }
                 }
                 catch (std::exception e)
@@ -460,8 +462,12 @@ namespace yobot {
             static std::string cancelReportChallenge(const GroupMsg& msg)
             {
                 auto group = Group(msg.group_id);
-                group.popChallenge();
-                return "撤销完成\n" + toText(group.getStatus());
+                if (auto popResult = group.popChallenge())
+                {
+                    auto content = "已撤销" + createQQAt(*popResult) + "的报刀\n" + toText(group.getStatus());
+                    return packMarkdown(content);
+                }
+                return "无法撤销";
             }
         }
 

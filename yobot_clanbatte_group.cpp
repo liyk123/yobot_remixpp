@@ -248,7 +248,7 @@ namespace yobot {
 				});
 			}
 
-			void Group::popChallenge()
+			std::optional<std::uint64_t> Group::popChallenge()
 			{
 				auto db = m_pool->get();
 				auto bid =
@@ -266,7 +266,7 @@ namespace yobot {
 				);
 				if (raws.empty())
 				{
-					return;
+					return std::nullopt;
 				}
 				Challenge chal;
 				for (auto&& raw : raws)
@@ -286,6 +286,7 @@ namespace yobot {
 					revokeChallenge(chal, s);
 		        });
 				db(remove_from(m_clanChallenge).where(m_clanChallenge.cid == maxCid));
+				return chal.userId;
 			}
 
 			void Group::clearChallenge()

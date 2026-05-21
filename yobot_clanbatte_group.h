@@ -68,7 +68,7 @@ namespace yobot {
 
                 void pushChallenge(const Challenge& challenge);
 
-                void popChallenge();
+                std::optional<std::uint64_t> popChallenge();
 
                 void clearChallenge();
 
