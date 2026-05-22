@@ -80,19 +80,34 @@ namespace yobot {
 			data.emplace("keyboard", json::object()).first->emplace("content", json::object()).first->emplace("rows", buttons);
 			return std::format("[CQ:markdown,data=base64://{}]", httplib::detail::base64_encode(data.dump()));
 		}
-		std::string createQQAt(const std::uint64_t id)
+
+		static std::string getRealId(const auto id)
 		{
 			auto& globalConfig = std::get<2>(getInstance());
 			auto gskSechemeHostPort = globalConfig["gsk_secheme_host_port"].get_ref<const std::string&>();
 			auto client = httplib::Client(gskSechemeHostPort);
 			client.set_follow_location(true);
-			auto params = httplib::Params{ {"type","2"}, {"id",std::to_string(id)} };
+			auto params = httplib::Params{ {"type","2"}, {"id",std::format("{}", id)}};
 			if (auto result = client.Get("/getid", params, {}); result->status == httplib::OK_200)
 			{
-				const auto realID = json::parse(result->body).at("id").get<std::string>();
+				return json::parse(result->body).at("id").get<std::string>();
+			}
+			return {};
+		}
+
+		std::string createQQAt(const std::uint64_t id)
+		{
+			if (const auto realID = getRealId(id); !realID.empty())
+			{
 				return std::format(R"(<qqbot-at-user id="{}"/>)", realID);
 			}
 			return {};
 		}
+
+		std::string getAvatar(const std::uint64_t appId, const std::string_view id)
+		{
+			return std::format("https://q.qlogo.cn/qqapp/{}/{}/1", appId, getRealId(id));
+		}
+		
 	}
 }

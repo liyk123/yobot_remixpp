@@ -14,5 +14,6 @@ namespace yobot {
 		json createQQBotButton(const std::string_view label, const std::string_view data, const std::uint8_t permission = 2, const std::string_view id = {});
 		std::string packMarkdown(const std::string_view content, const json::array_t& buttons = {});
 		std::string createQQAt(const std::uint64_t id);
+		std::string getAvatar(const std::uint64_t appId, const std::string_view id);
 	}
 }
