@@ -12,6 +12,7 @@ using yobot::tools::createQQBotButton;
 using yobot::tools::createQQBotCMDInput;
 using yobot::tools::packMarkdown;
 using yobot::tools::createQQAt;
+using yobot::tools::getAvatar;
 
 static std::int64_t operator""_k(unsigned long long val)
 {
@@ -88,36 +89,65 @@ namespace yobot {
                 auto content = toPicture(Group(msg.group_id).getStatus());
                 return packMarkdown(content);
             }
+            
+            static std::string makeApplyStr(const std::string_view strI, const std::int64_t HP, const std::int64_t fullHP, const bool lapFlag)
+            {
+                if (HP)
+                {
+                    auto cmdStr = "/申请出刀" + std::string(strI);
+                    auto HPVal = HP >= 10_k ? HP / 10_k : HP % 10_k;
+                    auto unit = HP >= 10_k ? "万" : "";
+                    auto showStr = std::format("{}{}/{}万", HPVal, unit, fullHP / 10_k);
+                    auto lapMark = lapFlag ? ">" : "";
+                    return std::format("{}>{}", lapMark, createQQBotCMDInput(cmdStr, showStr));
+                }
+                return "无法挑战";
+            }
 
-            static std::string toMarkdown(const status& status)
+            static std::string getChanllengerAvatars(const std::uint64_t appId, const json &chalList, const std::string_view strI)
+            {
+                bool chanllenging = !chalList.is_discarded() && chalList.contains(strI) && !chalList[strI].empty();
+                if (chanllenging)
+                {
+                    static auto ret = std::string{};
+                    ret.clear();
+                    for (auto&& [key, val] : chalList[strI].items())
+                    {
+                        ret += std::format("![img #20px #20px]({}) ", getAvatar(appId, key));
+                    }
+                    return ret;
+                }
+                return "无人挑战";
+            }
+
+            static std::string toMarkdown(const std::uint64_t appId, const status& status)
             {
                 auto& globalConfig = std::get<2>(getInstance());
                 auto& ids = globalConfig["boss_id"]["cn"];
                 auto& [lap, gameServer, chalList, subList, thisHPList, nextHPList] = status;
                 auto phase = getPhase(lap, gameServer);
-                auto mdStr = std::format("现在是**{}**阶段，第**{}**周目：\n>", (char)(phase + 'A'), lap);
+                auto mdStr = std::format("现在是**{}**阶段，第**{}**周目：\n", (char)(phase + 'A'), lap);
                 auto& lapHPList = globalConfig["boss_hp"][gameServer][phase].get_ref<const ordered_json::array_t&>();
                 for (std::size_t i = 1; i <= 5; ++i)
                 {
                     auto strI = StrIArray[i - 1];
                     auto bossID = ids[i - 1].get<ordered_json::number_integer_t>();
-                    bool chanllenging = !chalList.is_discarded() && chalList.contains(strI) && !chalList[strI].empty();
-                    auto img = std::format("![img #32px #32px](https://redive.estertion.win/icon/unit/{}.webp)", bossID);
                     bool lapFlag = thisHPList[strI] == 0;
                     auto& HPList = (lapFlag ? nextHPList : thisHPList);
-                    auto HP = HPList[strI].get<std::int64_t>();
-                    auto fullHP = lapHPList[i - 1].get<std::int64_t>();
-                    auto cmdStr = std::format("/申请出刀{}", i);
-                    auto showStr = std::format("{}{}/{}万", (HP >= 10_k ? HP / 10_k : HP % 10_k), (HP >= 10_k ? "万" : ""), fullHP / 10_k);
-                    auto optStr = std::format("{}>{}", (lapFlag ? ">" : ""), createQQBotCMDInput(cmdStr, showStr));
-                    mdStr += std::format("{}&nbsp;&nbsp;{}\n", img, (HP ? optStr.c_str() : "无法挑战"));
+                    auto imgStr = std::format("![img #32px #32px](https://redive.estertion.win/icon/unit/{}.webp)", bossID);
+                    auto applyStr = makeApplyStr(strI, HPList[strI], lapHPList[i - 1], lapFlag);
+                    auto reportStr = createQQBotCMDInput(std::string("/报刀").append(strI), "报刀");
+                    auto killedStr = createQQBotCMDInput(std::string("/尾刀").append(strI), "尾刀");
+                    auto avatarStr = getChanllengerAvatars(appId, chalList, strI);
+                    mdStr += std::format(">{}  {}  {}  {}\n", imgStr, applyStr, reportStr, killedStr);
+                    mdStr += std::format("&nbsp;&nbsp;{}\n", avatarStr);
                 }
                 return mdStr;
             }
 
             static std::string showPanel(const GroupMsg& msg)
             {
-                auto content = toMarkdown(Group(msg.group_id).getStatus());
+                auto content = toMarkdown(msg.self_id, Group(msg.group_id).getStatus());
                 static const auto buttons = json::array_t{
                     {{"buttons",json::array_t{createQQBotButton("面板","/面板")}}},
                     {{"buttons",json::array_t{
