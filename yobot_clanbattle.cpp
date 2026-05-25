@@ -137,7 +137,7 @@ namespace yobot {
                     auto reportStr = createQQBotCMDInput(std::string("/报刀").append(strI), "报刀");
                     auto killedStr = createQQBotCMDInput(std::string("/尾刀").append(strI), "尾刀");
                     auto avatarStr = getChanllengerAvatars(appId, chalList, strI);
-                    mdStr += std::format(">{}  {}  {}  {}\n", imgStr, applyStr, reportStr, killedStr);
+                    mdStr += std::format(">{} {} {} {}\n", imgStr, applyStr, reportStr, killedStr);
                     mdStr += std::format("&nbsp;&nbsp;{}\n", avatarStr);
                 }
                 return mdStr;
