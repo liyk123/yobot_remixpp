@@ -14,11 +14,6 @@ using yobot::tools::packMarkdown;
 using yobot::tools::createQQAt;
 using yobot::tools::getAvatar;
 
-static std::int64_t operator""_k(unsigned long long val)
-{
-    return val * 1000;
-}
-
 namespace yobot {
     namespace clanbattle {
         namespace detail {
@@ -94,10 +89,13 @@ namespace yobot {
             {
                 if (HP)
                 {
-                    auto cmdStr = "/申请出刀" + std::string(strI);
-                    auto HPVal = HP >= 10_k ? HP / 10_k : HP % 10_k;
-                    auto unit = HP >= 10_k ? "万" : "";
-                    auto showStr = std::format("{}{}/{}万", HPVal, unit, fullHP / 10_k);
+                    auto cmdStr = std::string("/申请出刀").append(strI);
+                    auto HPVal = HP >= 10000 ? HP / 10000 : HP % 10000;
+                    auto unit = HP >= 10000 ? "万" : "";
+                    auto percent = HP * 100 / fullHP;
+                    percent -= percent == 100 && HP < fullHP;
+                    percent += percent == 0 && HP > 0;
+                    auto showStr = std::format("{}{}/{}%25", HPVal, unit, percent);
                     auto lapMark = lapFlag ? ">" : "";
                     return std::format("{}>{}", lapMark, createQQBotCMDInput(cmdStr, showStr));
                 }
