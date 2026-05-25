@@ -8,18 +8,18 @@ constexpr auto Group404ErrorResponse = "未检测到数据，请先创建公会�
 constexpr auto FormatErrorResponse = "格式错误";
 constexpr std::string_view StrIArray[] = { "1","2","3","4","5" };
 
-using yobot::tools::createQQBotButton;
-using yobot::tools::createQQBotCMDInput;
-using yobot::tools::packMarkdown;
-using yobot::tools::createQQAt;
-using yobot::tools::getAvatar;
-
 namespace yobot {
     namespace clanbattle {
         namespace detail {
-            using tools::adaptHPList;
-            using tools::getPhase;
-
+            using tools::message::createQQBotButton;
+            using tools::message::createQQBotCMDInput;
+            using tools::message::packMarkdown;
+            using tools::message::createQQAt;
+            using tools::message::getAvatar;
+            using tools::clanbattle::adaptHPList;
+            using tools::clanbattle::getPhase;
+            using tools::clanbattle::regexSearch;
+            
             static std::string joinClan(const GroupMsg& msg)
             {
                 detail::Group(msg.group_id).addMember(msg.user_id);
@@ -229,7 +229,7 @@ namespace yobot {
                 static const std::regex parten(partenStr);
                 try
                 {
-                    std::smatch matches = tools::regexSearch(parten, msg.raw_message);
+                    std::smatch matches = regexSearch(parten, msg.raw_message);
                     if (!matches.empty())
                     {
                         int lap = std::atoi(matches[1].str().c_str());
@@ -300,7 +300,7 @@ namespace yobot {
                 static const std::regex parten(partenStr);
                 try
                 {
-                    std::smatch matches = tools::regexSearch(parten, msg.raw_message);
+                    std::smatch matches = regexSearch(parten, msg.raw_message);
                     if (!matches.empty())
                     {
                         auto bossNum = matches[1].str();
@@ -473,7 +473,7 @@ namespace yobot {
                 static const std::regex parten(partenStr);
                 try
                 {
-                    auto matches = tools::regexSearch(parten, msg.raw_message);
+                    auto matches = regexSearch(parten, msg.raw_message);
                     if (!matches.empty())
                     {
                         auto content = createQQAt(msg.user_id) + processReportChanllenge(msg, matches);

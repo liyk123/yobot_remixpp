@@ -5,8 +5,8 @@
 namespace yobot {
 	namespace clanbattle {
 		namespace detail {
-			using tools::adaptHPList;
-			using tools::getPhase;
+			using tools::clanbattle::adaptHPList;
+			using tools::clanbattle::getPhase;
 
 			NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(ChallengerDetail, is_continue, behalf, tree, msg);
 

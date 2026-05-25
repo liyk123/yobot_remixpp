@@ -5,8 +5,8 @@
 constexpr std::string_view StrIArray[] = { "1","2","3","4","5" };
 
 namespace yobot {
-	namespace clanbattle {
-		namespace tools {
+	namespace tools {
+		namespace clanbattle {
 			std::int8_t getPhase(const std::int64_t lap, const std::string& gameServer)
 			{
 				char ret = 0;
@@ -41,73 +41,72 @@ namespace yobot {
 			}
 		}
 
+		namespace message {
+			std::string createQQBotCMDInput(const std::string& cmdStr, const std::string_view showStr, const bool refer)
+			{
+				return std::format(R"(<qqbot-cmd-input text="{}" show="{}" reference="{}" />)", httplib::encode_uri(cmdStr), showStr, refer);
+			}
+
+			json createQQBotButton(const std::string_view label, const std::string_view data, const std::uint8_t permission, const std::string_view id)
+			{
+				return json{
+					{"id", id},
+					{"render_data", {{"label",label}, {"visited_label", label}, {"style", 1}}},
+					{
+						"action", {
+							{"type",2},
+							{"permission", {{"type", permission}}},
+							{"unsupport_tips", "操作不支持"},
+							{"data", data}
+						}
+					}
+				};
+			}
+
+			std::string packMarkdown(const std::string_view content, const json::array_t& buttons)
+			{
+				json data{};
+				data.emplace("markdown", json::object()).first->emplace("content", content);
+				data.emplace("keyboard", json::object()).first->emplace("content", json::object()).first->emplace("rows", buttons);
+				return std::format("[CQ:markdown,data=base64://{}]", httplib::detail::base64_encode(data.dump()));
+			}
+
+			static std::string getRealId(const auto id)
+			{
+				auto& globalConfig = std::get<2>(getInstance());
+				auto gskSechemeHostPort = globalConfig["gsk_secheme_host_port"].get_ref<const std::string&>();
+				auto client = httplib::Client(gskSechemeHostPort);
+				client.set_follow_location(true);
+				auto params = httplib::Params{ {"type","2"}, {"id",std::format("{}", id)} };
+				if (auto result = client.Get("/getid", params, {}); result->status == httplib::OK_200)
+				{
+					return json::parse(result->body).at("id").get<std::string>();
+				}
+				return {};
+			}
+
+			std::string createQQAt(const std::uint64_t id)
+			{
+				if (const auto realID = getRealId(id); !realID.empty())
+				{
+					return std::format(R"(<qqbot-at-user id="{}"/>)", realID);
+				}
+				return {};
+			}
+
+			std::string getAvatar(const std::uint64_t appId, const std::string_view id)
+			{
+				return std::format("https://q.qlogo.cn/qqapp/{}/{}/1", appId, getRealId(id));
+			}
+		}
+
 		// 模板特化导出以避免链接问题
 		namespace _ {
 			void _()
 			{
-				tools::adaptHPList(ordered_json::array_t{});
-				tools::adaptHPList(json::array_t{});
+				clanbattle::adaptHPList(ordered_json::array_t{});
+				clanbattle::adaptHPList(json::array_t{});
 			}
 		}
-	}
-
-	namespace tools {
-		std::string createQQBotCMDInput(const std::string& cmdStr, const std::string_view showStr, const bool refer)
-		{
-			return std::format(R"(<qqbot-cmd-input text="{}" show="{}" reference="{}" />)", httplib::encode_uri(cmdStr), showStr, refer);
-		}
-
-		json createQQBotButton(const std::string_view label, const std::string_view data, const std::uint8_t permission, const std::string_view id)
-		{
-			return json{
-				{"id", id},
-				{"render_data", {{"label",label}, {"visited_label", label}, {"style", 1}}},
-				{
-					"action", {
-						{"type",2},
-						{"permission", {{"type", permission}}},
-						{"unsupport_tips", "操作不支持"},
-						{"data", data}
-					}
-				}
-			};
-		}
-
-		std::string packMarkdown(const std::string_view content, const json::array_t& buttons)
-		{
-			json data{};
-			data.emplace("markdown", json::object()).first->emplace("content", content);
-			data.emplace("keyboard", json::object()).first->emplace("content", json::object()).first->emplace("rows", buttons);
-			return std::format("[CQ:markdown,data=base64://{}]", httplib::detail::base64_encode(data.dump()));
-		}
-
-		static std::string getRealId(const auto id)
-		{
-			auto& globalConfig = std::get<2>(getInstance());
-			auto gskSechemeHostPort = globalConfig["gsk_secheme_host_port"].get_ref<const std::string&>();
-			auto client = httplib::Client(gskSechemeHostPort);
-			client.set_follow_location(true);
-			auto params = httplib::Params{ {"type","2"}, {"id",std::format("{}", id)}};
-			if (auto result = client.Get("/getid", params, {}); result->status == httplib::OK_200)
-			{
-				return json::parse(result->body).at("id").get<std::string>();
-			}
-			return {};
-		}
-
-		std::string createQQAt(const std::uint64_t id)
-		{
-			if (const auto realID = getRealId(id); !realID.empty())
-			{
-				return std::format(R"(<qqbot-at-user id="{}"/>)", realID);
-			}
-			return {};
-		}
-
-		std::string getAvatar(const std::uint64_t appId, const std::string_view id)
-		{
-			return std::format("https://q.qlogo.cn/qqapp/{}/{}/1", appId, getRealId(id));
-		}
-		
 	}
 }
