@@ -75,7 +75,7 @@ namespace yobot {
                 }
                 auto& globalConfig = std::get<2>(getInstance());
                 auto paintSvrUrl = globalConfig["paint_secheme_host_port"].get<std::string_view>();
-                auto rawUri = std::format("{}/progress?data={}", paintSvrUrl, data.dump());
+                auto rawUri = std::format("{}/progress?data={}&t={}", paintSvrUrl, data.dump(), std::time(nullptr));
                 return std::format(R"(![img #480px #640px]({}))", rawUri);
             }
 
