@@ -134,11 +134,16 @@ namespace yobot {
                     auto& HPList = (lapFlag ? nextHPList : thisHPList);
                     auto imgStr = std::format("![img #32px #32px](https://redive.estertion.win/icon/unit/{}.webp)", bossID);
                     auto applyStr = makeApplyStr(strI, HPList[strI], lapHPList[i - 1], lapFlag);
+                    mdStr += std::format(">{} {} \n", imgStr, applyStr);
+                    if (HPList[strI] == 0)
+                    {
+                        continue;
+                    }
                     auto reportStr = createQQBotCMDInput(std::string("/报刀").append(strI), "报刀");
                     auto killedStr = createQQBotCMDInput(std::string("/尾刀").append(strI), "尾刀");
                     auto avatarStr = getChanllengerAvatars(appId, chalList, strI);
-                    mdStr += std::format(">{} {} {} {}\n", imgStr, applyStr, reportStr, killedStr);
-                    mdStr += std::format("&nbsp;&nbsp;{}\n", avatarStr);
+                    mdStr += std::format(">{} {} \n", reportStr, killedStr);
+                    mdStr += std::format(">{} \n", avatarStr);
                 }
                 return mdStr;
             }
