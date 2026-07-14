@@ -7,6 +7,9 @@ constexpr auto TargetLocaleName = "zh_CN.UTF-8";
 constexpr auto Group404ErrorResponse = "未检测到数据，请先创建公会！";
 constexpr auto FormatErrorResponse = "格式错误";
 constexpr std::string_view StrIArray[] = { "1","2","3","4","5" };
+#define DUMMY_PIC "![img #0px #1px](https://q.qlogo.cn/qqapp/0/0/0)"
+#define RED_SQUARE "https://placehold.co/0/red/red/png"
+#define GREY_SQUARE "https://placehold.co/0/grey/grey/png"
 
 namespace yobot {
     namespace clanbattle {
@@ -84,6 +87,14 @@ namespace yobot {
                 auto content = toPicture(Group(msg.group_id).getStatus());
                 return packMarkdown(content);
             }
+
+            static std::string makeProgressStr(const std::int64_t HP, const std::int64_t fullHP)
+            {
+                auto cent = HP * 160 / fullHP;
+                cent -= cent == 160 && HP < fullHP;
+                cent += cent == 0 && HP > 0;
+                return std::format("![img #{}px #10px](" RED_SQUARE ")![img #{}px #10px](" GREY_SQUARE ")", cent, 160 - cent);
+            }
             
             static std::string makeApplyStr(const std::string_view strI, const std::int64_t HP, const std::int64_t fullHP, const bool lapFlag)
             {
@@ -92,12 +103,9 @@ namespace yobot {
                     auto cmdStr = std::string("/申请出刀").append(strI);
                     auto HPVal = HP >= 10000 ? HP / 10000 : HP % 10000;
                     auto unit = HP >= 10000 ? "万" : "";
-                    auto percent = HP * 100 / fullHP;
-                    percent -= percent == 100 && HP < fullHP;
-                    percent += percent == 0 && HP > 0;
-                    auto showStr = std::format("{}{}/{}%", HPVal, unit, percent);
-                    auto lapMark = lapFlag ? ">" : "";
-                    return std::format("{}>{}", lapMark, createQQBotCMDInput(cmdStr, showStr));
+                    auto showStr = std::format("{}{}", HPVal, unit);
+                    auto lapMark = lapFlag ? "🟦" : "🟥";
+                    return std::format("{}{}", lapMark, createQQBotCMDInput(cmdStr, showStr));
                 }
                 return "无法挑战";
             }
@@ -111,7 +119,7 @@ namespace yobot {
                     ret.clear();
                     for (auto&& [key, val] : chalList[strI].items())
                     {
-                        ret += std::format("![img #20px #20px]({}) ", getAvatar(appId, key));
+                        ret += std::format("![img #20px #20px]({})&ensp;", getAvatar(appId, key));
                     }
                     return ret;
                 }
@@ -133,17 +141,20 @@ namespace yobot {
                     bool lapFlag = thisHPList[strI] == 0;
                     auto& HPList = (lapFlag ? nextHPList : thisHPList);
                     auto imgStr = std::format("![img #32px #32px](https://redive.estertion.win/icon/unit/{}.webp)", bossID);
+                    auto progressStr = makeProgressStr(HPList[strI], lapHPList[i - 1]);
                     auto applyStr = makeApplyStr(strI, HPList[strI], lapHPList[i - 1], lapFlag);
-                    mdStr += std::format(">{} {} \n", imgStr, applyStr);
+                    mdStr += std::format(">{}&ensp;{} \n", imgStr, progressStr);
+                    mdStr += std::format(">&emsp;{} ", applyStr);
                     if (HPList[strI] == 0)
                     {
+                        mdStr += "\n";
                         continue;
                     }
                     auto reportStr = createQQBotCMDInput(std::string("/报刀").append(strI), "报刀");
                     auto killedStr = createQQBotCMDInput(std::string("/尾刀").append(strI), "尾刀");
                     auto avatarStr = getChanllengerAvatars(appId, chalList, strI);
-                    mdStr += std::format(">{} {} \n", reportStr, killedStr);
-                    mdStr += std::format(">{} \n", avatarStr);
+                    mdStr += std::format("{} {} \n", reportStr, killedStr);
+                    mdStr += std::format(">" DUMMY_PIC "&emsp;{} \n", avatarStr);
                 }
                 return mdStr;
             }
