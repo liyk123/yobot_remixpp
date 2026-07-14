@@ -95,7 +95,7 @@ namespace yobot {
                     auto percent = HP * 100 / fullHP;
                     percent -= percent == 100 && HP < fullHP;
                     percent += percent == 0 && HP > 0;
-                    auto showStr = std::format("{}{}/{}%25", HPVal, unit, percent);
+                    auto showStr = std::format("{}{}/{}%", HPVal, unit, percent);
                     auto lapMark = lapFlag ? ">" : "";
                     return std::format("{}>{}", lapMark, createQQBotCMDInput(cmdStr, showStr));
                 }

@@ -42,9 +42,9 @@ namespace yobot {
 		}
 
 		namespace message {
-			std::string createQQBotCMDInput(const std::string& cmdStr, const std::string_view showStr, const bool refer)
+			std::string createQQBotCMDInput(const std::string& cmdStr, const std::string& showStr, const bool refer)
 			{
-				return std::format(R"(<qqbot-cmd-input text="{}" show="{}" reference="{}" />)", httplib::encode_uri(cmdStr), showStr, refer);
+				return std::format(R"(<qqbot-cmd-input text="{}" show="{}" reference="{}" />)", httplib::encode_uri(cmdStr), httplib::encode_uri(showStr), refer);
 			}
 
 			json createQQBotButton(const std::string_view label, const std::string_view data, const std::uint8_t permission, const std::string_view id)
