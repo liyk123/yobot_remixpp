@@ -8,7 +8,7 @@ constexpr auto Group404ErrorResponse = "未检测到数据，请先创建公会�
 constexpr auto FormatErrorResponse = "格式错误";
 constexpr std::string_view StrIArray[] = { "1","2","3","4","5" };
 #define DUMMY_PIC "![img #0px #1px](https://q.qlogo.cn/qqapp/0/0/0)"
-#define RED_SQUARE "https://placehold.co/0/red/red/png"
+#define DARKRED_SQUARE "https://placehold.co/0/C00000/C00000/png"
 #define GREY_SQUARE "https://placehold.co/0/grey/grey/png"
 
 namespace yobot {
@@ -93,7 +93,7 @@ namespace yobot {
                 auto cent = HP * 160 / fullHP;
                 cent -= cent == 160 && HP < fullHP;
                 cent += cent == 0 && HP > 0;
-                return std::format("![img #{}px #10px](" RED_SQUARE ")![img #{}px #10px](" GREY_SQUARE ")", cent, 160 - cent);
+                return std::format("![img #{}px #10px](" DARKRED_SQUARE ")![img #{}px #10px](" GREY_SQUARE ")", cent, 160 - cent);
             }
             
             static std::string makeApplyStr(const std::string_view strI, const std::int64_t HP, const std::int64_t fullHP, const bool lapFlag)
