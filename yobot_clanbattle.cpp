@@ -8,8 +8,6 @@ constexpr auto Group404ErrorResponse = "未检测到数据，请先创建公会�
 constexpr auto FormatErrorResponse = "格式错误";
 constexpr std::string_view StrIArray[] = { "1","2","3","4","5" };
 #define DUMMY_PIC "![img #0px #1px](https://q.qlogo.cn/qqapp/0/0/0)"
-#define DARKRED_SQUARE "https://placehold.co/0/C00000/C00000/png"
-#define GREY_SQUARE "https://placehold.co/0/grey/grey/png"
 
 namespace yobot {
     namespace clanbattle {
@@ -93,21 +91,19 @@ namespace yobot {
                 auto cent = HP * 160 / fullHP;
                 cent -= cent == 160 && HP < fullHP;
                 cent += cent == 0 && HP > 0;
-                return std::format("![img #{}px #10px](" DARKRED_SQUARE ")![img #{}px #10px](" GREY_SQUARE ")", cent, 160 - cent);
+                auto redRect = cent == 0 ? "" : std::format(R"(\colorbox{{#C00000}}{{\hspace{{{}pt}}}})", cent);
+                auto greyRect = cent == 160 ? "" : std::format(R"(\kern-6pt\colorbox{{gray}}{{\hspace{{{}pt}}}})", 160 - cent);
+                return std::format(R"(${}{} \atop {}/{}$)", redRect, greyRect, HP, fullHP);
             }
-            
-            static std::string makeApplyStr(const std::string_view strI, const std::int64_t HP, const std::int64_t fullHP, const bool lapFlag)
+
+            static std::string makeCMDInputs(const std::string_view strI)
             {
-                if (HP)
-                {
-                    auto cmdStr = std::string("/申请出刀").append(strI);
-                    auto HPVal = HP >= 10000 ? HP / 10000 : HP % 10000;
-                    auto unit = HP >= 10000 ? "万" : "";
-                    auto showStr = std::format("{}{}", HPVal, unit);
-                    auto lapMark = lapFlag ? "🟦" : "🟥";
-                    return std::format("{}{}", lapMark, createQQBotCMDInput(cmdStr, showStr));
-                }
-                return "无法挑战";
+                return std::format(
+                    "{} {} {}"
+                    , createQQBotCMDInput(std::string("/申请出刀").append(strI), "申请")
+                    , createQQBotCMDInput(std::string("/报刀").append(strI), "报刀")
+                    , createQQBotCMDInput(std::string("/尾刀").append(strI), "尾刀")
+                );
             }
 
             static std::string getChanllengerAvatars(const std::uint64_t appId, const json &chalList, const std::string_view strI)
@@ -121,9 +117,9 @@ namespace yobot {
                     {
                         ret += std::format("![img #20px #20px]({})&ensp;", getAvatar(appId, key));
                     }
-                    return ret;
+                    return DUMMY_PIC "&emsp;" + ret;
                 }
-                return "无人挑战";
+                return "&emsp;无人挑战";
             }
 
             static std::string toMarkdown(const std::uint64_t appId, const status& status)
@@ -139,22 +135,21 @@ namespace yobot {
                     auto strI = StrIArray[i - 1];
                     auto bossID = ids[i - 1].get<ordered_json::number_integer_t>();
                     bool lapFlag = thisHPList[strI] == 0;
-                    auto& HPList = (lapFlag ? nextHPList : thisHPList);
+                    auto& HP = (lapFlag ? nextHPList : thisHPList)[strI];
                     auto imgStr = std::format("![img #32px #32px](https://redive.estertion.win/icon/unit/{}.webp)", bossID);
-                    auto progressStr = makeProgressStr(HPList[strI], lapHPList[i - 1]);
-                    auto applyStr = makeApplyStr(strI, HPList[strI], lapHPList[i - 1], lapFlag);
+                    auto progressStr = makeProgressStr(HP, lapHPList[i - 1]);
                     mdStr += std::format(">{}&ensp;{} \n", imgStr, progressStr);
-                    mdStr += std::format(">&emsp;{} ", applyStr);
-                    if (HPList[strI] == 0)
+                    mdStr += ">&emsp;";
+                    if (HP == 0)
                     {
-                        mdStr += "\n";
+                        mdStr += "无法挑战 \n";
                         continue;
                     }
-                    auto reportStr = createQQBotCMDInput(std::string("/报刀").append(strI), "报刀");
-                    auto killedStr = createQQBotCMDInput(std::string("/尾刀").append(strI), "尾刀");
+                    auto lapMark = lapFlag ? "🟦" : "🟥";
+                    auto cmdInputs = makeCMDInputs(strI);
                     auto avatarStr = getChanllengerAvatars(appId, chalList, strI);
-                    mdStr += std::format("{} {} \n", reportStr, killedStr);
-                    mdStr += std::format(">" DUMMY_PIC "&emsp;{} \n", avatarStr);
+                    mdStr += std::format("{}&ensp;{} \n", lapMark, cmdInputs);
+                    mdStr += std::format(">{} \n", avatarStr);
                 }
                 return mdStr;
             }
