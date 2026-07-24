@@ -60,13 +60,15 @@ COPY --from=builder /dist/${TARGET_NAME} ${CMAKE_INSTALL_PREFIX}/bin/${TARGET_NA
 
 # Create non-root user and ensure ownership/permissions
 RUN adduser --disabled-password --gecos "" appuser || true && \
-    mkdir -p /home/appuser /app && \
-    chown -R appuser:appuser /app ${CMAKE_INSTALL_PREFIX}/bin/${TARGET_NAME} && \
+    mkdir -p /home/appuser && \
+    chown -R appuser:appuser ${CMAKE_INSTALL_PREFIX}/bin/${TARGET_NAME} && \
     chmod +x ${CMAKE_INSTALL_PREFIX}/bin/${TARGET_NAME}
 
 ENV PATH=${CMAKE_INSTALL_PREFIX}/bin:$PATH
  
 WORKDIR /app
+
+RUN chown -R appuser:appuser /app
 
 # Expose the requested port
 EXPOSE 9222
