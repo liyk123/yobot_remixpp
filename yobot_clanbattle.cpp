@@ -91,9 +91,9 @@ namespace yobot {
                 auto cent = HP * 160 / fullHP;
                 cent -= cent == 160 && HP < fullHP;
                 cent += cent == 0 && HP > 0;
-                auto redRect = cent == 0 ? "" : std::format(R"(\colorbox{{#C00000}}{{\hspace{{{}pt}}}})", cent);
-                auto greyRect = cent == 160 ? "" : std::format(R"(\kern-6pt\colorbox{{gray}}{{\hspace{{{}pt}}}})", 160 - cent);
-                return std::format(R"(${}{} \atop {}/{}$)", redRect, greyRect, HP, fullHP);
+                auto redRect = cent == 0 ? "" : std::format(R"(\textcolor{{#C00000}}{{\rule{{{}px}}{{6px}}}})", cent);
+                auto greyRect = cent == 160 ? "" : std::format(R"(\textcolor{{gray}}{{\rule{{{}px}}{{6px}}}})", 160 - cent);
+                return std::format(R"(${}{} \atop \mathbf{{\textcolor{{black}}{{\small{}/{}}}}}$)", redRect, greyRect, HP, fullHP);
             }
 
             static std::string makeCMDInputs(const std::string_view strI)
