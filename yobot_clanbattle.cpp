@@ -88,11 +88,12 @@ namespace yobot {
 
             static std::string makeProgressStr(const std::int64_t HP, const std::int64_t fullHP)
             {
-                auto cent = HP * 160 / fullHP;
-                cent -= cent == 160 && HP < fullHP;
+                constexpr auto full = 180;
+                auto cent = HP * full / fullHP;
+                cent -= cent == full && HP < fullHP;
                 cent += cent == 0 && HP > 0;
                 auto redRect = cent == 0 ? "" : std::format(R"(\textcolor{{#C00000}}{{\rule{{{}px}}{{6px}}}})", cent);
-                auto greyRect = cent == 160 ? "" : std::format(R"(\textcolor{{gray}}{{\rule{{{}px}}{{6px}}}})", 160 - cent);
+                auto greyRect = cent == full ? "" : std::format(R"(\textcolor{{gray}}{{\rule{{{}px}}{{6px}}}})", full - cent);
                 return std::format(R"(${}{} \atop \mathbf{{\textcolor{{black}}{{\small{}/{}}}}}$)", redRect, greyRect, HP, fullHP);
             }
 
